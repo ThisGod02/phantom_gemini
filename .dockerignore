@@ -1,0 +1,14 @@
+node_modules
+.git
+.env
+.env.*
+!.env.example
+data/
+repos/
+local/
+*.log
+*.db
+*.db-wal
+*.db-shm
+.DS_Store
+bun.lockb

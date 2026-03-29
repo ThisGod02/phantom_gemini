@@ -1,0 +1,35 @@
+# Phantom Quick Start - No vector memory
+# Usage: docker compose -f docker-compose.quick.yaml up -d
+# The agent works but has no persistent memory across sessions.
+
+services:
+  phantom:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: phantom
+    ports:
+      - "${PORT:-3100}:3100"
+    env_file:
+      - .env
+    environment:
+      - QDRANT_URL=
+      - OLLAMA_URL=
+    group_add:
+      - "${DOCKER_GID:-988}"
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    volumes:
+      - phantom_config:/app/config
+      - phantom_evolved:/app/phantom-config
+      - phantom_data:/app/data
+      - phantom_public:/app/public
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+
+volumes:
+  phantom_config:
+  phantom_evolved:
+  phantom_data:
+  phantom_public:

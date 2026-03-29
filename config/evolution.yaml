@@ -1,0 +1,39 @@
+# Self-Evolution Engine Configuration
+
+# How often various evolution operations run
+cadence:
+  # Run reflection after every N sessions (1 = every session)
+  reflection_interval: 1
+  # Run strategy consolidation every N sessions
+  consolidation_interval: 10
+  # Run full config review every N sessions
+  full_review_interval: 50
+  # Run drift check every N sessions
+  drift_check_interval: 20
+
+# Validation gate thresholds
+gates:
+  # Cosine similarity threshold for drift gate (0-1, lower = more permissive)
+  drift_threshold: 0.7
+  # Max lines per config file
+  max_file_lines: 200
+  # Success rate drop that triggers auto-rollback (0-1)
+  auto_rollback_threshold: 0.10
+  # Number of sessions to evaluate after a change
+  auto_rollback_window: 5
+
+# Reflection agent settings
+reflection:
+  model: "claude-sonnet-4-20250514"
+  effort: "high"
+  max_budget_usd: 0.50
+
+# Directory paths (relative to project root)
+paths:
+  config_dir: "phantom-config"
+  constitution: "phantom-config/constitution.md"
+  version_file: "phantom-config/meta/version.json"
+  metrics_file: "phantom-config/meta/metrics.json"
+  evolution_log: "phantom-config/meta/evolution-log.jsonl"
+  golden_suite: "phantom-config/meta/golden-suite.jsonl"
+  session_log: "phantom-config/memory/session-log.jsonl"

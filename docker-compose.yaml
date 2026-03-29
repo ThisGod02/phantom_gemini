@@ -1,0 +1,113 @@
+# Phantom AI Agent - Full Stack
+# Usage: docker compose up -d
+# Docs: https://github.com/ghostwright/phantom
+
+services:
+  # =========================================================================
+  # Phantom: The AI agent
+  # =========================================================================
+  phantom:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: phantom
+    ports:
+      - "${PORT:-3100}:3100"
+    env_file:
+      - .env
+    environment:
+      # Override memory URLs to use Docker service names
+      - QDRANT_URL=http://qdrant:6333
+      - OLLAMA_URL=http://ollama:11434
+    # Non-root: Claude Code CLI refuses --dangerously-skip-permissions as root.
+    # Docker socket access is granted via group_add with the host's docker GID.
+    # Override DOCKER_GID in .env if your host's docker group has a different ID
+    # (find it with: stat -c '%g' /var/run/docker.sock).
+    group_add:
+      - "${DOCKER_GID:-988}"
+    # Explicit DNS: hosts using systemd-resolved expose 127.0.0.53 which is
+    # unreachable from bridge-network containers. Cloudflare + Google as fallback.
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    volumes:
+      # Persistent state - survives docker compose down/up
+      - phantom_config:/app/config
+      - phantom_evolved:/app/phantom-config
+      - phantom_data:/app/data
+      - phantom_public:/app/public
+      - phantom_repos:/app/repos
+      # Docker socket for sibling container creation
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      qdrant:
+        condition: service_started
+      ollama:
+        condition: service_started
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 256M
+    networks:
+      - phantom-net
+
+  # =========================================================================
+  # Qdrant: Vector database for memory (episodic, semantic, procedural)
+  # =========================================================================
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: phantom-qdrant
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    # No healthcheck: the qdrant/qdrant image has no curl/wget.
+    # The phantom entrypoint polls /healthz with its own retry loop.
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 512M
+    networks:
+      - phantom-net
+
+  # =========================================================================
+  # Ollama: Local embedding model (nomic-embed-text)
+  # =========================================================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: phantom-ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1G
+    networks:
+      - phantom-net
+
+# =========================================================================
+# Named volumes - persist across container restarts and redeployments
+# Use 'docker compose down' to stop (keeps data)
+# Use 'docker compose down -v' to destroy all data (clean slate)
+# =========================================================================
+volumes:
+  phantom_config:
+  phantom_evolved:
+  phantom_data:
+  phantom_public:
+  phantom_repos:
+  qdrant_data:
+  ollama_data:
+
+networks:
+  phantom-net:
+    driver: bridge

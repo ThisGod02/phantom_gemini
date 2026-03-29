@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="phantom-light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{TITLE}} - Phantom</title>
+
+  <!-- Flash prevention: set theme before any paint -->
+  <script>
+    (function() {
+      var stored = localStorage.getItem('phantom-theme');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      var theme = stored || (prefersDark ? 'phantom-dark' : 'phantom-light');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <!-- DaisyUI + Tailwind -->
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+
+  <!-- Syntax highlighting (auto-switches with theme) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github.min.css" id="hljs-light">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css" id="hljs-dark" disabled>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
+
+  <!-- Sync hljs sheets before paint -->
+  <script>
+    (function() {
+      var theme = document.documentElement.getAttribute('data-theme');
+      var isLight = theme === 'phantom-light';
+      var ls = document.getElementById('hljs-light');
+      var ds = document.getElementById('hljs-dark');
+      if (ls) ls.disabled = !isLight;
+      if (ds) ds.disabled = isLight;
+    })();
+  </script>
+
+  <!-- Phantom Design System: theme variables for Tailwind v4 browser CDN -->
+  <style type="text/tailwindcss">
+    @theme {
+      --color-phantom: #0891b2;
+      --color-phantom-bright: #22d3ee;
+      --color-phantom-dim: #0e7490;
+      --font-family-sans: 'Inter', system-ui, -apple-system, sans-serif;
+      --font-family-mono: 'JetBrains Mono', ui-monospace, monospace;
+    }
+
+    /* ---- Light Theme (Default) ---- */
+    [data-theme="phantom-light"] {
+      --color-base-100: #fafaf9;
+      --color-base-200: #ffffff;
+      --color-base-300: #e7e5e4;
+      --color-base-content: #1c1917;
+
+      --color-primary: #0891b2;
+      --color-primary-content: #ffffff;
+
+      --color-secondary: #57534e;
+      --color-secondary-content: #ffffff;
+
+      --color-accent: #0891b2;
+      --color-accent-content: #ffffff;
+
+      --color-neutral: #f5f5f4;
+      --color-neutral-content: #57534e;
+
+      --color-info: #2563eb;
+      --color-info-content: #ffffff;
+
+      --color-success: #16a34a;
+      --color-success-content: #ffffff;
+
+      --color-warning: #ca8a04;
+      --color-warning-content: #ffffff;
+
+      --color-error: #dc2626;
+      --color-error-content: #ffffff;
+
+      --radius-box: 0.75rem;
+      --radius-field: 0.625rem;
+      --radius-selector: 0.5rem;
+      --border: 1px;
+      --depth: 1;
+      --noise: 0;
+
+      color-scheme: light;
+    }
+
+    /* ---- Dark Theme ---- */
+    [data-theme="phantom-dark"] {
+      --color-base-100: #0c0a09;
+      --color-base-200: #1c1917;
+      --color-base-300: #292524;
+      --color-base-content: #fafaf9;
+
+      --color-primary: #22d3ee;
+      --color-primary-content: #0c0a09;
+
+      --color-secondary: #a8a29e;
+      --color-secondary-content: #0c0a09;
+
+      --color-accent: #22d3ee;
+      --color-accent-content: #0c0a09;
+
+      --color-neutral: #1c1917;
+      --color-neutral-content: #a8a29e;
+
+      --color-info: #60a5fa;
+      --color-info-content: #0c0a09;
+
+      --color-success: #4ade80;
+      --color-success-content: #0c0a09;
+
+      --color-warning: #fbbf24;
+      --color-warning-content: #0c0a09;
+
+      --color-error: #f87171;
+      --color-error-content: #0c0a09;
+
+      --radius-box: 0.75rem;
+      --radius-field: 0.625rem;
+      --radius-selector: 0.5rem;
+      --border: 1px;
+      --depth: 1;
+      --noise: 0;
+
+      color-scheme: dark;
+    }
+  </style>
+
+  <!-- Custom CSS kept outside text/tailwindcss to avoid Tailwind v4 browser CDN parse errors
+       when var() references are used inside linear-gradient and other complex values -->
+  <style>
+    html {
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    main {
+      animation: fadeIn 0.3s ease-out;
+    }
+
+    .card {
+      transition: box-shadow 0.15s ease, border-color 0.15s ease;
+    }
+
+    .card-hover:hover {
+      box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+      border-color: var(--color-base-300);
+    }
+
+    [data-theme="phantom-dark"] .card-hover:hover {
+      box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+    }
+
+    .table th {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      opacity: 0.6;
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 9999px;
+      display: inline-block;
+    }
+
+    .status-dot-pulse {
+      animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .skeleton-line {
+      height: 14px;
+      border-radius: 6px;
+      background: linear-gradient(90deg, var(--color-base-300) 25%, transparent 50%, var(--color-base-300) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+    }
+
+    @keyframes shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    .trend-up { color: var(--color-success); }
+    .trend-down { color: var(--color-error); }
+    .trend-flat { color: var(--color-secondary); }
+
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+
+  <!-- Page-specific CDN libraries go here -->
+  <!-- e.g., ECharts: <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script> -->
+  <!-- e.g., Mermaid: <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script> -->
+
+  <!-- ECharts Phantom Theme (register before any chart code) -->
+  <script>
+    window.phantomChartTheme = {
+      light: {
+        color: [
+          '#0891b2', '#8b5cf6', '#f97316', '#06b6d4',
+          '#ec4899', '#10b981', '#6366f1', '#f59e0b',
+          '#14b8a6', '#a855f7'
+        ],
+        backgroundColor: 'transparent',
+        textStyle: {
+          color: '#57534e',
+          fontFamily: 'Inter, system-ui, sans-serif',
+          fontSize: 12
+        },
+        title: {
+          textStyle: { color: '#1c1917', fontWeight: 600, fontSize: 14 },
+          subtextStyle: { color: '#78716c', fontSize: 12 }
+        },
+        legend: {
+          textStyle: { color: '#57534e', fontSize: 12 },
+          icon: 'roundRect',
+          itemWidth: 12,
+          itemHeight: 8,
+          itemGap: 16
+        },
+        tooltip: {
+          backgroundColor: '#ffffff',
+          borderColor: '#e7e5e4',
+          borderWidth: 1,
+          textStyle: { color: '#1c1917', fontSize: 12 },
+          extraCssText: 'border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.08); padding: 10px 14px;'
+        },
+        grid: {
+          left: '3%', right: '3%', bottom: '3%', top: '14%',
+          containLabel: true
+        },
+        xAxis: {
+          axisLine: { lineStyle: { color: '#e7e5e4' } },
+          axisTick: { lineStyle: { color: '#e7e5e4' } },
+          axisLabel: { color: '#78716c', fontSize: 11 },
+          splitLine: { lineStyle: { color: '#f5f5f4', type: 'dashed' } }
+        },
+        yAxis: {
+          axisLine: { show: false },
+          axisTick: { show: false },
+          axisLabel: { color: '#78716c', fontSize: 11 },
+          splitLine: { lineStyle: { color: '#f5f5f4', type: 'dashed' } }
+        },
+        line: {
+          smooth: true,
+          symbolSize: 4,
+          lineStyle: { width: 2 }
+        },
+        bar: {
+          barMaxWidth: 32,
+          itemStyle: { borderRadius: [4, 4, 0, 0] }
+        },
+        pie: {
+          radius: ['45%', '70%'],
+          itemStyle: { borderColor: '#ffffff', borderWidth: 2, borderRadius: 4 },
+          label: { color: '#57534e', fontSize: 12 }
+        },
+        radar: {
+          axisLine: { lineStyle: { color: '#e7e5e4' } },
+          splitLine: { lineStyle: { color: '#f5f5f4' } },
+          splitArea: { areaStyle: { color: ['transparent', 'rgba(245,245,244,0.4)'] } }
+        }
+      },
+      dark: {
+        color: [
+          '#22d3ee', '#a78bfa', '#fb923c', '#06b6d4',
+          '#f472b6', '#34d399', '#818cf8', '#fbbf24',
+          '#2dd4bf', '#c084fc'
+        ],
+        backgroundColor: 'transparent',
+        textStyle: {
+          color: '#a8a29e',
+          fontFamily: 'Inter, system-ui, sans-serif',
+          fontSize: 12
+        },
+        title: {
+          textStyle: { color: '#fafaf9', fontWeight: 600, fontSize: 14 },
+          subtextStyle: { color: '#78716c', fontSize: 12 }
+        },
+        legend: {
+          textStyle: { color: '#a8a29e', fontSize: 12 },
+          icon: 'roundRect',
+          itemWidth: 12,
+          itemHeight: 8,
+          itemGap: 16
+        },
+        tooltip: {
+          backgroundColor: '#1c1917',
+          borderColor: '#292524',
+          borderWidth: 1,
+          textStyle: { color: '#fafaf9', fontSize: 12 },
+          extraCssText: 'border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.4); padding: 10px 14px;'
+        },
+        grid: {
+          left: '3%', right: '3%', bottom: '3%', top: '14%',
+          containLabel: true
+        },
+        xAxis: {
+          axisLine: { lineStyle: { color: '#292524' } },
+          axisTick: { lineStyle: { color: '#292524' } },
+          axisLabel: { color: '#78716c', fontSize: 11 },
+          splitLine: { lineStyle: { color: '#1c1917', type: 'dashed' } }
+        },
+        yAxis: {
+          axisLine: { show: false },
+          axisTick: { show: false },
+          axisLabel: { color: '#78716c', fontSize: 11 },
+          splitLine: { lineStyle: { color: '#1c1917', type: 'dashed' } }
+        },
+        line: {
+          smooth: true,
+          symbolSize: 4,
+          lineStyle: { width: 2 }
+        },
+        bar: {
+          barMaxWidth: 32,
+          itemStyle: { borderRadius: [4, 4, 0, 0] }
+        },
+        pie: {
+          radius: ['45%', '70%'],
+          itemStyle: { borderColor: '#1c1917', borderWidth: 2, borderRadius: 4 },
+          label: { color: '#a8a29e', fontSize: 12 }
+        },
+        radar: {
+          axisLine: { lineStyle: { color: '#292524' } },
+          splitLine: { lineStyle: { color: '#1c1917' } },
+          splitArea: { areaStyle: { color: ['transparent', 'rgba(28,25,23,0.4)'] } }
+        }
+      }
+    };
+
+    // Auto-register if ECharts is loaded
+    if (typeof echarts !== 'undefined') {
+      echarts.registerTheme('phantom-light', window.phantomChartTheme.light);
+      echarts.registerTheme('phantom-dark', window.phantomChartTheme.dark);
+    }
+
+    // Helper: get current chart theme name
+    window.getPhantomChartTheme = function() {
+      return document.documentElement.getAttribute('data-theme') || 'phantom-light';
+    };
+  </script>
+</head>
+<body class="bg-base-100 text-base-content font-sans min-h-screen">
+
+  <!-- Navbar -->
+  <nav class="navbar bg-base-200 border-b border-base-300 px-6 sticky top-0 z-50 backdrop-blur-md bg-base-200/90">
+    <div class="navbar-start gap-3">
+      <!-- Brand -->
+      <a href="/ui/" class="flex items-center gap-2.5 hover:opacity-80 transition-opacity">
+        <img src="/ui/phantom-logo.svg" alt="Phantom" class="w-7 h-7" />
+        <span class="font-semibold text-base tracking-tight">Phantom</span>
+      </a>
+      <!-- Breadcrumb separator + page title -->
+      <span class="text-base-content/20">/</span>
+      <span class="text-sm text-base-content/60 font-medium">{{TITLE}}</span>
+    </div>
+
+    <div class="navbar-end gap-3">
+      <!-- Date -->
+      <span class="text-xs text-base-content/40 font-mono hidden sm:inline">{{DATE}}</span>
+      <!-- Theme toggle -->
+      <button
+        id="theme-toggle"
+        class="btn btn-ghost btn-sm btn-square"
+        aria-label="Toggle theme"
+      >
+        <!-- Sun icon (shown in dark mode) -->
+        <svg id="icon-sun" class="w-4 h-4 hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
+        </svg>
+        <!-- Moon icon (shown in light mode) -->
+        <svg id="icon-moon" class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z" />
+        </svg>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Main content area -->
+  <main class="max-w-7xl mx-auto px-6 py-8">
+    <!-- Agent writes content here -->
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-base-300 mt-16">
+    <div class="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between text-xs text-base-content/40">
+      <div class="flex items-center gap-2">
+        <img src="/ui/phantom-logo.svg" alt="Phantom" class="w-4 h-4" />
+        <span>Generated by Phantom</span>
+      </div>
+      <span class="font-mono">{{TIMESTAMP}}</span>
+    </div>
+  </footer>
+
+  <!-- Highlight.js init -->
+  <script>hljs.highlightAll();</script>
+
+  <!-- Theme toggle handler -->
+  <script>
+    (function() {
+      var toggle = document.getElementById('theme-toggle');
+      var sun = document.getElementById('icon-sun');
+      var moon = document.getElementById('icon-moon');
+
+      function updateIcons() {
+        var theme = document.documentElement.getAttribute('data-theme');
+        var isDark = theme === 'phantom-dark';
+        sun.classList.toggle('hidden', !isDark);
+        moon.classList.toggle('hidden', isDark);
+
+        var lightSheet = document.getElementById('hljs-light');
+        var darkSheet = document.getElementById('hljs-dark');
+        if (lightSheet) lightSheet.disabled = isDark;
+        if (darkSheet) darkSheet.disabled = !isDark;
+      }
+
+      updateIcons();
+
+      toggle.addEventListener('click', function() {
+        var current = document.documentElement.getAttribute('data-theme');
+        var next = current === 'phantom-dark' ? 'phantom-light' : 'phantom-dark';
+        document.documentElement.setAttribute('data-theme', next);
+        localStorage.setItem('phantom-theme', next);
+        updateIcons();
+      });
+
+      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(e) {
+        if (!localStorage.getItem('phantom-theme')) {
+          var theme = e.matches ? 'phantom-dark' : 'phantom-light';
+          document.documentElement.setAttribute('data-theme', theme);
+          updateIcons();
+        }
+      });
+    })();
+  </script>
+
+  <!-- SSE auto-reload -->
+  <script>
+    if (window.EventSource) {
+      var es = new EventSource('/ui/api/events');
+      es.addEventListener('reload', function() { location.reload(); });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,69 @@
+name: Build and Publish Docker Image
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: docker-publish
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghostwright/phantom
+          # latest=auto only applies "latest" for stable semver (not prereleases)
+          flavor: |
+            latest=auto
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=sha-
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify image
+        run: |
+          # Pull and run a basic sanity check on the amd64 image.
+          # Multi-arch manifests are already pushed, so the default
+          # platform (amd64 on ubuntu-latest) will be selected.
+          VERSION="${GITHUB_REF_NAME#v}"
+          docker pull --quiet ghostwright/phantom:${VERSION}
+          docker run --rm ghostwright/phantom:${VERSION} bun --version
+          echo "Verification passed for ghostwright/phantom:${VERSION}"

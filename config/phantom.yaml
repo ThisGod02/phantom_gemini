@@ -1,0 +1,18 @@
+name: phantom
+port: 3100
+role: swe
+model: claude-sonnet-4-6
+effort: max
+max_budget_usd: 0
+timeout_minutes: 240
+
+# Peer Phantom connections (other Phantoms this instance can query via MCP)
+# peers:
+#   swe-phantom:
+#     url: https://swe.ghostwright.dev/mcp
+#     token: "bearer-token-for-swe"
+#     description: "Software Engineering Phantom"
+#   data-phantom:
+#     url: https://data.ghostwright.dev/mcp
+#     token: "bearer-token-for-data"
+#     description: "Data Analyst Phantom"

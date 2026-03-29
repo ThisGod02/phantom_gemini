@@ -1,0 +1,38 @@
+{
+  "name": "phantom",
+  "version": "0.16.2",
+  "type": "module",
+  "bin": {
+    "phantom": "src/cli/main.ts"
+  },
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "dev": "bun run --watch src/index.ts",
+    "phantom": "bun run src/cli/main.ts",
+    "lint": "biome check src/",
+    "lint:fix": "biome check --write src/",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "format": "biome format --write src/"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.77",
+    "@anthropic-ai/sdk": "^0.80.0",
+    "@modelcontextprotocol/sdk": "^1.28.0",
+    "@slack/bolt": "^4.6.0",
+    "croner": "^10.0.1",
+    "imapflow": "^1.2.18",
+    "nodemailer": "^8.0.4",
+    "resend": "^6.9.4",
+    "telegraf": "^4.16.3",
+    "yaml": "^2.6.0",
+    "zod": "^3.24.0",
+    "zod-to-json-schema": "^3.25.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.0",
+    "@types/bun": "latest",
+    "@types/nodemailer": "^7.0.11",
+    "typescript": "^5.7.0"
+  }
+}
