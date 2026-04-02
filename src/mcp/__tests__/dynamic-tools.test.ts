@@ -269,6 +269,7 @@ describe("Dynamic Tools via MCP Protocol", () => {
 					port: 3100,
 					role: "swe", provider: "google",
 					model: "claude-opus-4-6",
+					enable_search: false,
 					effort: "max" as const,
 					max_budget_usd: 0,
 					timeout_minutes: 240,

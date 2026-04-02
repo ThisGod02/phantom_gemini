@@ -32,7 +32,7 @@ export class OpenAIProvider implements LLMProvider {
 
 		for (const content of contents) {
 			const isModel = content.role === "model";
-			
+
 			// Check if this content contains function calls (from assistant)
 			const functionCalls = content.parts?.filter((p) => p.functionCall);
 			if (functionCalls && functionCalls.length > 0) {
@@ -40,7 +40,7 @@ export class OpenAIProvider implements LLMProvider {
 					const name = p.functionCall!.name || "unknown_function";
 					const id = `call_${name}_${callIndex++}`;
 					callIdMap.set(name, id);
-					
+
 					return {
 						id,
 						type: "function" as const,

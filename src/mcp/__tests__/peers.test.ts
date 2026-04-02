@@ -127,6 +127,7 @@ describe("PeerManager", () => {
 				port: 3100,
 				role: "swe",
 				model: "claude-opus-4-6",
+				enable_search: false,
 				peers: {
 					"swe-peer": {
 						url: "https://swe.dev/mcp",

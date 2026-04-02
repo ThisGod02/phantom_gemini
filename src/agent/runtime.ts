@@ -59,7 +59,9 @@ export class AgentRuntime {
 		this.sessionStore = new SessionStore(db);
 		this.costTracker = new CostTracker(db);
 		const apiKey = config.provider === "openai" ? process.env.ROUTERAI_API_KEY : process.env.GOOGLE_API_KEY;
-		this.llm = createProvider(config.provider, apiKey, config.base_url);
+		this.llm = createProvider(config.provider, apiKey, config.base_url, { 
+			enableSearch: config.enable_search 
+		});
 	}
 
 	public getSessionStore(): SessionStore {

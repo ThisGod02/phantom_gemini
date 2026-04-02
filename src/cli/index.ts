@@ -4,6 +4,7 @@ const COMMANDS: Record<string, string> = {
 	doctor: "Check system health and diagnose issues",
 	token: "Manage MCP authentication tokens",
 	status: "Show quick status of the running Phantom",
+	login: "Sign in with Google (OAuth) for high-limit Gemini CLI mode",
 };
 
 function printHelp(): void {
@@ -60,6 +61,11 @@ export async function runCli(argv: string[]): Promise<void> {
 		case "status": {
 			const { runStatus } = await import("./status.ts");
 			await runStatus(commandArgs);
+			break;
+		}
+		case "login": {
+			const { runLogin } = await import("./login.ts");
+			await runLogin(commandArgs);
 			break;
 		}
 		default:

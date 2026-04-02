@@ -238,18 +238,12 @@ export function buildReflectionPrompt(
 	].join("\n");
 
 	return [
-		"You are a reflection agent reviewing a completed session. Your job is to identify",
-		"what went well, what went wrong, and suggest specific, minimal config changes.",
+		"You are a reflection agent. Identify what went well, what failed, and suggest minimal config changes.",
+		"Analyze the session and config. For each change specify:",
+		'- file (e.g. "user-profile.md"), type ("append", "replace", "remove")',
+		"- exact content, rationale, and tier",
 		"",
-		"Analyze the session and current configuration. For each suggested change:",
-		'- Specify the file (e.g., "user-profile.md")',
-		'- Specify the type ("append", "replace", or "remove")',
-		"- Provide the exact content to add/replace",
-		"- Explain why this change is needed",
-		'- Specify the tier ("immutable", "constrained", or "free")',
-		"",
-		"Be conservative. Only suggest changes supported by clear evidence from the session.",
-		"Do not suggest changes to constitution.md (it is immutable).",
+		"Be conservative. Only suggest changes with clear evidence. Do not modify constitution.md.",
 		"",
 		configSummary,
 		"",
