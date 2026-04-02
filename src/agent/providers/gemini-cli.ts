@@ -19,8 +19,10 @@ export class GeminiCliProvider implements LLMProvider {
 		
 		let finalApiKey = apiKey || process.env.GOOGLE_API_KEY;
 		let accessToken: string | undefined;
+		let projectId: string | undefined;
+		let location = "us-central1";
 
-		// If no API key, try to load OAuth token from Gemini CLI config
+		// If no API key, try to load OAuth token and Project from Gemini CLI config
 		if (!finalApiKey) {
 			try {
 				const os = require('os');
@@ -28,32 +30,45 @@ export class GeminiCliProvider implements LLMProvider {
 				const path = require('path');
 				const homedir = os.homedir();
 				const credsPath = path.join(homedir, '.gemini', 'oauth_creds.json');
+				const projectsPath = path.join(homedir, '.gemini', 'projects.json');
 				
 				if (fs.existsSync(credsPath)) {
 					const creds = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
 					if (creds.access_token) {
 						accessToken = creds.access_token;
-						// console.log(`[gemini-cli] Using OAuth token for ${creds.email || 'account'}`);
+					}
+				}
+
+				if (fs.existsSync(projectsPath)) {
+					const projects = JSON.parse(fs.readFileSync(projectsPath, 'utf8'));
+					// Usually the first project or the one marked active
+					const current = projects.find((p: any) => p.active || p.current) || projects[0];
+					if (current && current.id) {
+						projectId = current.id;
 					}
 				}
 			} catch (e) {
-				// Silent fail, will fallback to SDK warning if neither key nor token exists
+				// Silent fail
 			}
 		}
 
-		// Initialize client. If we have an accessToken, we'll need to pass it in headers
+		// Initialize client.
 		this.client = new GoogleGenAI({ 
-			// Use a 39-char dummy if no key is present to suppress SDK console warnings.
-			// The actual auth is handled by the injected Bearer token.
+			// If we have an accessToken, we use Vertex AI mode to bypass AI Studio scope restrictions
+			vertexai: !!accessToken,
+			project: projectId,
+			location: location,
 			apiKey: finalApiKey || "AIzaSy" + "A".repeat(33), 
 		});
 
 		if (accessToken) {
 			if (!finalApiKey) {
 				console.log(`[gemini-cli] OAuth session active (token detected)`);
+				if (projectId) {
+					console.log(`[gemini-cli] Using Vertex AI mode (Project: ${projectId})`);
+				}
 			}
 			// Inject OAuth token into the hidden ApiClient
-			// This bypasses the default NodeAuth/WebAuth which only supports x-goog-api-key
 			const apiClient = (this.client as any).apiClient;
 			if (apiClient && apiClient.clientOptions) {
 				apiClient.clientOptions.auth = {
