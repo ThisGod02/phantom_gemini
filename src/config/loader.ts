@@ -40,6 +40,15 @@ export function loadConfig(path?: string): PhantomConfig {
 	if (process.env.PHANTOM_ROLE?.trim()) {
 		config.role = process.env.PHANTOM_ROLE.trim();
 	}
+	if (process.env.PHANTOM_PROVIDER) {
+		const provider = process.env.PHANTOM_PROVIDER;
+		if (provider === "google" || provider === "openai") {
+			config.provider = provider;
+		}
+	}
+	if (process.env.PHANTOM_BASE_URL) {
+		config.base_url = process.env.PHANTOM_BASE_URL;
+	}
 	if (process.env.PHANTOM_EFFORT) {
 		const effort = process.env.PHANTOM_EFFORT;
 		if (effort === "low" || effort === "medium" || effort === "high" || effort === "max") {
