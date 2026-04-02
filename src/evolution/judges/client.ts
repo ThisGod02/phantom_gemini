@@ -11,7 +11,14 @@ let _client: LLMProvider | null = null;
 function getClient(): LLMProvider {
 	if (!_client) {
 		const provider = process.env.PHANTOM_PROVIDER || "google";
-		const apiKey = provider === "openai" ? process.env.ROUTERAI_API_KEY : process.env.GOOGLE_API_KEY;
+		let apiKey: string | undefined;
+		if (provider === "openai") {
+			apiKey = process.env.ROUTERAI_API_KEY;
+		} else if (provider === "gemini-cli") {
+			apiKey = undefined; // Will be handled by OAuth detection in Provider
+		} else {
+			apiKey = process.env.GOOGLE_API_KEY;
+		}
 		_client = createProvider(provider, apiKey, process.env.PHANTOM_BASE_URL);
 	}
 	return _client;
@@ -24,6 +31,7 @@ export function setClient(client: LLMProvider | null): void {
 
 export function isJudgeAvailable(): boolean {
 	const provider = process.env.PHANTOM_PROVIDER || "google";
+	if (provider === "gemini-cli") return true; 
 	const apiKey = provider === "openai" ? process.env.ROUTERAI_API_KEY : process.env.GOOGLE_API_KEY;
 	return !!apiKey;
 }

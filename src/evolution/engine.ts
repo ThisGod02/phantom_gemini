@@ -38,7 +38,9 @@ export class EvolutionEngine {
 		this.checker = new ConstitutionChecker(this.config);
 		this.llmJudgesEnabled = this.resolveJudgeMode();
 		if (this.llmJudgesEnabled) {
-			console.log("[evolution] LLM judges enabled (API key detected)");
+			const provider = process.env.PHANTOM_PROVIDER || "google";
+			const mode = provider === "gemini-cli" ? "OAuth/Gemini-CLI detected" : "API key detected";
+			console.log(`[evolution] LLM judges enabled (${mode})`);
 		} else {
 			console.log("[evolution] LLM judges disabled (no API key or config override)");
 		}
@@ -50,6 +52,7 @@ export class EvolutionEngine {
 		if (setting === "always") return true;
 		
 		const provider = process.env.PHANTOM_PROVIDER || "google";
+		if (provider === "gemini-cli") return true; 
 		if (provider === "openai") return !!process.env.ROUTERAI_API_KEY;
 		return !!process.env.GOOGLE_API_KEY;
 	}

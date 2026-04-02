@@ -43,10 +43,15 @@ export class GeminiCliProvider implements LLMProvider {
 
 		// Initialize client. If we have an accessToken, we'll need to pass it in headers
 		this.client = new GoogleGenAI({ 
-			apiKey: finalApiKey || 'OAUTH_TOKEN_ACTIVE', // Dummy key to satisfy SDK if using token
+			// Use a 39-char dummy if no key is present to suppress SDK console warnings.
+			// The actual auth is handled by the injected Bearer token.
+			apiKey: finalApiKey || "AIzaSy" + "A".repeat(33), 
 		});
 
 		if (accessToken) {
+			if (!finalApiKey) {
+				console.log(`[gemini-cli] OAuth session active (token detected)`);
+			}
 			// Inject OAuth token into the hidden ApiClient
 			// This bypasses the default NodeAuth/WebAuth which only supports x-goog-api-key
 			const apiClient = (this.client as any).apiClient;
