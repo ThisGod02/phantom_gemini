@@ -58,14 +58,17 @@ export class GeminiCliProvider implements LLMProvider {
 			vertexai: !!accessToken,
 			project: projectId,
 			location: location,
-			apiKey: finalApiKey || "AIzaSy" + "A".repeat(33), 
+			// API key and Project/Location are mutually exclusive in the SDK
+			apiKey: accessToken ? undefined : (finalApiKey || "AIzaSy" + "A".repeat(33)), 
 		});
 
 		if (accessToken) {
 			if (!finalApiKey) {
 				console.log(`[gemini-cli] OAuth session active (token detected)`);
-				if (projectId) {
+				if (projectId && !!accessToken) {
 					console.log(`[gemini-cli] Using Vertex AI mode (Project: ${projectId})`);
+				} else if (!!accessToken) {
+					console.warn(`[gemini-cli] WARNING: No Project ID found for Vertex AI mode. Requests might fail.`);
 				}
 			}
 			// Inject OAuth token into the hidden ApiClient
