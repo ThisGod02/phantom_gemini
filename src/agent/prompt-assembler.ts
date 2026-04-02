@@ -258,32 +258,39 @@ function buildSecurity(): string {
 
 function buildEvolvedSections(evolved: EvolvedConfig): string {
 	const parts: string[] = [];
+	const SECTION_LIMIT = 10000; // 10k chars (~2.5k tokens) per section max
+
+	const truncate = (text: string) => {
+		const trimmed = text.trim();
+		if (trimmed.length <= SECTION_LIMIT) return trimmed;
+		return `${trimmed.slice(0, SECTION_LIMIT)}\n\n[... knowledge truncated for performance ...]`;
+	};
 
 	if (evolved.constitution.trim()) {
-		parts.push(`# Constitution\n\n${evolved.constitution.trim()}`);
+		parts.push(`# Constitution\n\n${truncate(evolved.constitution)}`);
 	}
 
 	if (evolved.persona.trim() && countContentLines(evolved.persona) > 1) {
-		parts.push(`# Communication Style\n\n${evolved.persona.trim()}`);
+		parts.push(`# Communication Style\n\n${truncate(evolved.persona)}`);
 	}
 
 	if (evolved.userProfile.trim() && countContentLines(evolved.userProfile) > 1) {
-		parts.push(`# User Profile\n\n${evolved.userProfile.trim()}`);
+		parts.push(`# User Profile\n\n${truncate(evolved.userProfile)}`);
 	}
 
 	if (evolved.domainKnowledge.trim() && countContentLines(evolved.domainKnowledge) > 1) {
-		parts.push(`# Domain Knowledge\n\n${evolved.domainKnowledge.trim()}`);
+		parts.push(`# Domain Knowledge\n\n${truncate(evolved.domainKnowledge)}`);
 	}
 
 	const strategyParts: string[] = [];
 	if (evolved.strategies.taskPatterns.trim() && countContentLines(evolved.strategies.taskPatterns) > 1) {
-		strategyParts.push(evolved.strategies.taskPatterns.trim());
+		strategyParts.push(truncate(evolved.strategies.taskPatterns));
 	}
 	if (evolved.strategies.toolPreferences.trim() && countContentLines(evolved.strategies.toolPreferences) > 1) {
-		strategyParts.push(evolved.strategies.toolPreferences.trim());
+		strategyParts.push(truncate(evolved.strategies.toolPreferences));
 	}
 	if (evolved.strategies.errorRecovery.trim() && countContentLines(evolved.strategies.errorRecovery) > 1) {
-		strategyParts.push(evolved.strategies.errorRecovery.trim());
+		strategyParts.push(truncate(evolved.strategies.errorRecovery));
 	}
 	if (strategyParts.length > 0) {
 		parts.push(`# Learned Strategies\n\n${strategyParts.join("\n\n")}`);
