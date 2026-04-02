@@ -71,7 +71,7 @@ export class SessionStore {
 		if (!session?.chat_history) return [];
 		try {
 			const history = JSON.parse(session.chat_history) as Content[];
-			const HISTORY_CHAR_BUDGET = 40000; // ~10,000 tokens
+			const HISTORY_CHAR_BUDGET = 20000; // ~5,000 tokens
 			const MAX_CHAR_PER_MSG = 5000;
 			
 			let currentBudget = HISTORY_CHAR_BUDGET;

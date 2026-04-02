@@ -186,35 +186,11 @@ function buildEnvironment(config: PhantomConfig): string {
 	lines.push(
 		"- IMPORTANT: Never wrap URLs in asterisks, bold, or any formatting. URLs must be plain text so Slack renders them as clickable links without corrupting the token.",
 	);
-	lines.push("");
-	lines.push("When creating web pages, follow these design guidelines:");
-	lines.push("1. PAGE MODE. For simple pages (no CDN libraries): use phantom_create_page with title+content.");
-	lines.push("   For pages with charts/diagrams (ECharts, Mermaid, D3): use phantom_create_page with the html");
-	lines.push("   parameter for FULL page control. The content parameter injects inside <main>, which breaks");
-	lines.push("   CDN script loading (race conditions, empty charts). Copy the base template structure from");
-	lines.push("   public/_base.html and put CDN scripts in <head>, app scripts at bottom of <body>.");
-	lines.push("2. SCRIPT PLACEMENT. CDN <script src> tags go in <head>. App initialization scripts go at");
-	lines.push("   the bottom of <body> after the footer. NEVER put <script> tags inside <main>.");
-	lines.push("3. DESIGN SYSTEM. Use DaisyUI semantic classes, never hardcoded hex colors:");
-	lines.push("   - Backgrounds: bg-base-100 (page), bg-base-200 (cards), bg-base-300 (borders)");
-	lines.push("   - Text: text-base-content (primary), text-base-content/60 (secondary), /40 (muted)");
-	lines.push("   - Accent: text-primary, bg-primary, bg-primary/10 (subtle)");
-	lines.push("   - Status badges: bg-success/15 text-success, bg-error/15 text-error, etc.");
-	lines.push(
-		'4. CARD PATTERN. Wrap sections in: <div class="card bg-base-200 border border-base-300"><div class="card-body p-5">...</div></div>',
-	);
-	lines.push("5. TABLES. Use DaisyUI table component with table-sm class, uppercase th headers.");
-	lines.push("6. CHARTS. Use ECharts with the pre-configured phantom theme. Set background to transparent.");
-	lines.push("   Register theme in <head> after ECharts loads. Init charts at bottom of <body>.");
-	lines.push("   On theme toggle: dispose() all charts, re-init with new theme. Add resize handler.");
-	lines.push("7. SPACING. gap-4 between cards, mb-8 between sections, p-5 inside cards.");
-	lines.push("8. EMPTY STATES. Always include an empty state with icon, heading, and hint text.");
-	lines.push('9. TAILWIND v4 CSS. Theme var declarations in <style type="text/tailwindcss">. Custom CSS');
-	lines.push("   that uses var() goes in a plain <style> block (not text/tailwindcss). Use bg-opacity-90");
-	lines.push("   not bg-base-200/90 (slash opacity unreliable with browser CDN).");
-	lines.push("8. LOADING. Use skeleton-line class for async content loading states.");
-	lines.push("9. RESPONSIVE. grid-cols-1 md:grid-cols-2 lg:grid-cols-4 for stat grids.");
-	lines.push("10. NO HARDCODED COLORS. Always use semantic Tailwind/DaisyUI classes.");
+	lines.push("## Web UI Design System");
+	lines.push("- Use DaisyUI and Tailwind v4. Pages served at /ui/<filename>.");
+	lines.push("- Theme toggle enabled. Use bg-base-100 (page), bg-base-200 (cards).");
+	lines.push("- Use charts (ECharts) and diagrams (Mermaid) via CDN in <head>.");
+	lines.push("- Init scripts at bottom of <body>. Follow clean, modern aesthetics.");
 	if (publicUrl) {
 		lines.push(`- Pages are at ${publicUrl}/ui/<filename>`);
 	}
@@ -238,15 +214,8 @@ function buildEnvironment(config: PhantomConfig): string {
 	lines.push("- The user uses this token to authenticate their requests");
 
 	if (process.env.RESEND_API_KEY) {
-		const emailDomain = config.domain ?? "ghostwright.dev";
-		const emailAddress = `${config.name}@${emailDomain}`;
-		lines.push("");
-		lines.push("You have your own email address and can send email:");
-		lines.push(`- Your email: ${emailAddress}`);
-		lines.push("- Use phantom_send_email to send emails");
-		lines.push("- Be professional. You represent your owner.");
-		lines.push("- Include context so recipients know why they got the email.");
-		lines.push("- Never send unsolicited email. Only email people your owner asks about.");
+		const emailAddress = `${config.name}@${config.domain ?? "phantom.local"}`;
+		lines.push(`- Email: ${emailAddress} (via Resend SDK).`);
 	}
 
 	lines.push("");
