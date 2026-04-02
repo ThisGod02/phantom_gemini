@@ -17,11 +17,47 @@ export class GeminiCliProvider implements LLMProvider {
 	constructor(apiKey?: string, options?: { enableSearch?: boolean }) {
 		this.options = options || {};
 		
-		// If using OAuth/Device Flow, the official @google/genai SDK (v1+) 
-		// can use Application Default Credentials (ADC) or a provided token.
+		let finalApiKey = apiKey || process.env.GOOGLE_API_KEY;
+		let accessToken: string | undefined;
+
+		// If no API key, try to load OAuth token from Gemini CLI config
+		if (!finalApiKey) {
+			try {
+				const os = require('os');
+				const fs = require('fs');
+				const path = require('path');
+				const homedir = os.homedir();
+				const credsPath = path.join(homedir, '.gemini', 'oauth_creds.json');
+				
+				if (fs.existsSync(credsPath)) {
+					const creds = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
+					if (creds.access_token) {
+						accessToken = creds.access_token;
+						// console.log(`[gemini-cli] Using OAuth token for ${creds.email || 'account'}`);
+					}
+				}
+			} catch (e) {
+				// Silent fail, will fallback to SDK warning if neither key nor token exists
+			}
+		}
+
+		// Initialize client. If we have an accessToken, we'll need to pass it in headers
 		this.client = new GoogleGenAI({ 
-			apiKey: apiKey || process.env.GOOGLE_API_KEY 
+			apiKey: finalApiKey || 'OAUTH_TOKEN_ACTIVE', // Dummy key to satisfy SDK if using token
 		});
+
+		if (accessToken) {
+			// Inject OAuth token into the hidden ApiClient
+			// This bypasses the default NodeAuth/WebAuth which only supports x-goog-api-key
+			const apiClient = (this.client as any).apiClient;
+			if (apiClient && apiClient.clientOptions) {
+				apiClient.clientOptions.auth = {
+					addAuthHeaders: async (headers: Headers) => {
+						headers.set('Authorization', `Bearer ${accessToken}`);
+					}
+				};
+			}
+		}
 	}
 
 	async generateContent(
@@ -46,9 +82,16 @@ export class GeminiCliProvider implements LLMProvider {
 			} as any);
 		}
 
+		// Map model name and check for invalid versions
+		let modelName = model.replace('google/', '');
+		if (modelName.startsWith('gemini-3')) {
+			console.warn(`[gemini-cli] WARNING: Model "${modelName}" is likely invalid. Defaulting to "gemini-2.0-flash" to avoid 404.`);
+			modelName = "gemini-2.0-flash";
+		}
+
 		// Use the official model.generateContent API
 		const response = await this.client.models.generateContent({
-			model: model.replace('google/', ''), // SDK expects 'gemini-2.0-flash'
+			model: modelName,
 			contents,
 			config: {
 				systemInstruction,
