@@ -97,4 +97,7 @@ export const MIGRATIONS: string[] = [
 		expires_at TEXT NOT NULL,
 		completed_at TEXT
 	)`,
+
+	// Migration: replace sdk_session_id (Claude Code) with chat_history (Gemini Content[])
+	`ALTER TABLE sessions ADD COLUMN chat_history TEXT`,
 ];

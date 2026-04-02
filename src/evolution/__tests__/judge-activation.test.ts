@@ -82,60 +82,60 @@ let savedApiKey: string | undefined;
 
 describe("Judge Activation", () => {
 	beforeEach(() => {
-		savedApiKey = process.env.ANTHROPIC_API_KEY;
+		savedApiKey = process.env.GOOGLE_API_KEY;
 	});
 
 	afterEach(() => {
 		if (savedApiKey !== undefined) {
-			process.env.ANTHROPIC_API_KEY = savedApiKey;
+			process.env.GOOGLE_API_KEY = savedApiKey;
 		} else {
-			process.env.ANTHROPIC_API_KEY = undefined;
+			process.env.GOOGLE_API_KEY = undefined;
 		}
 		rmSync(TEST_DIR, { recursive: true, force: true });
 	});
 
-	test("auto mode enables judges when ANTHROPIC_API_KEY is set", () => {
-		process.env.ANTHROPIC_API_KEY = "sk-test-key";
+	test("auto mode enables judges when GOOGLE_API_KEY is set", () => {
+		process.env.GOOGLE_API_KEY = "AIza-test-key";
 		setupWithJudgeMode("auto");
 		const engine = new EvolutionEngine(CONFIG_PATH);
 		expect(engine.usesLLMJudges()).toBe(true);
 	});
 
-	test("auto mode disables judges when ANTHROPIC_API_KEY is missing", () => {
-		process.env.ANTHROPIC_API_KEY = undefined;
+	test("auto mode disables judges when GOOGLE_API_KEY is missing", () => {
+		process.env.GOOGLE_API_KEY = undefined;
 		setupWithJudgeMode("auto");
 		const engine = new EvolutionEngine(CONFIG_PATH);
 		expect(engine.usesLLMJudges()).toBe(false);
 	});
 
 	test("never mode disables judges even when API key is set", () => {
-		process.env.ANTHROPIC_API_KEY = "sk-test-key";
+		process.env.GOOGLE_API_KEY = "AIza-test-key";
 		setupWithJudgeMode("never");
 		const engine = new EvolutionEngine(CONFIG_PATH);
 		expect(engine.usesLLMJudges()).toBe(false);
 	});
 
 	test("always mode enables judges regardless of API key", () => {
-		process.env.ANTHROPIC_API_KEY = undefined;
+		process.env.GOOGLE_API_KEY = undefined;
 		setupWithJudgeMode("always");
 		const engine = new EvolutionEngine(CONFIG_PATH);
 		expect(engine.usesLLMJudges()).toBe(true);
 	});
 
 	test("usesLLMJudges accessor matches resolved state", () => {
-		process.env.ANTHROPIC_API_KEY = "sk-test-key";
+		process.env.GOOGLE_API_KEY = "AIza-test-key";
 		setupWithJudgeMode("auto");
 		const engine = new EvolutionEngine(CONFIG_PATH);
 		expect(engine.usesLLMJudges()).toBe(true);
 
-		process.env.ANTHROPIC_API_KEY = undefined;
+		process.env.GOOGLE_API_KEY = undefined;
 		setupWithJudgeMode("auto");
 		const engine2 = new EvolutionEngine(CONFIG_PATH);
 		expect(engine2.usesLLMJudges()).toBe(false);
 	});
 
 	test("missing judges section defaults to auto mode", () => {
-		process.env.ANTHROPIC_API_KEY = undefined;
+		process.env.GOOGLE_API_KEY = undefined;
 		mkdirSync(`${TEST_DIR}/config`, { recursive: true });
 		mkdirSync(`${TEST_DIR}/phantom-config/meta`, { recursive: true });
 		mkdirSync(`${TEST_DIR}/phantom-config/strategies`, { recursive: true });

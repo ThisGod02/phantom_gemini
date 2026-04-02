@@ -1,8 +1,8 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { createInProcessToolServer } from "./agent/in-process-tools.ts";
+import { dynamicToolDeclarations, handleDynamicToolCall } from "./agent/in-process-tools.ts";
 import { AgentRuntime } from "./agent/runtime.ts";
-import type { RuntimeEvent } from "./agent/runtime.ts";
+import type { RuntimeEvent, ToolHandler } from "./agent/runtime.ts";
 import { CliChannel } from "./channels/cli.ts";
 import { EmailChannel } from "./channels/email.ts";
 import { emitFeedback, setFeedbackHandler } from "./channels/feedback.ts";
@@ -30,7 +30,7 @@ import {
 } from "./core/server.ts";
 import { closeDatabase, getDatabase } from "./db/connection.ts";
 import { runMigrations } from "./db/migrate.ts";
-import { createEmailToolServer } from "./email/tool.ts";
+import { createEmailDeclarations, handleEmailToolCall } from "./email/tool.ts";
 import { EvolutionEngine } from "./evolution/engine.ts";
 import type { SessionSummary } from "./evolution/types.ts";
 import { PeerHealthMonitor } from "./mcp/peer-health.ts";
@@ -47,11 +47,11 @@ import { getOnboardingStatus } from "./onboarding/state.ts";
 import { createRoleRegistry } from "./roles/registry.ts";
 import type { RoleTemplate } from "./roles/types.ts";
 import { Scheduler } from "./scheduler/service.ts";
-import { createSchedulerToolServer } from "./scheduler/tool.ts";
+import { handleSchedulerToolCall, schedulerDeclarations } from "./scheduler/tool.ts";
 import { getSecretRequest } from "./secrets/store.ts";
-import { createSecretToolServer } from "./secrets/tools.ts";
+import { handleSecretsToolCall, secretsDeclarations } from "./secrets/tools.ts";
 import { setPublicDir, setSecretSavedCallback, setSecretsDb } from "./ui/serve.ts";
-import { createWebUiToolServer } from "./ui/tools.ts";
+import { handleWebUiToolCall, webUiDeclarations } from "./ui/tools.ts";
 
 async function main(): Promise<void> {
 	const startedAt = Date.now();
@@ -169,31 +169,41 @@ async function main(): Promise<void> {
 		});
 		setMcpServerProvider(() => mcpServer);
 
-		// Wire dynamic tool management tools into the agent as in-process MCP tools
+		// Wire dynamic tool management tools into the agent
 		const registry = mcpServer.getDynamicToolRegistry();
 
 		// Wire scheduler into the agent (Slack channel set later after channel init)
 		scheduler = new Scheduler({ db, runtime });
 
-		// Pass factories (not singletons) so each query() gets fresh MCP server instances.
-		// The underlying registries (DynamicToolRegistry, Scheduler) are singletons.
-		// Only the lightweight McpServer wrappers are recreated per query.
-		// This prevents "Already connected to a transport" crashes when the scheduler
-		// fires a query while a previous session's transport hasn't fully cleaned up.
 		const secretsBaseUrl = config.public_url ?? `http://localhost:${config.port}`;
-		runtime.setMcpServerFactories({
-			"phantom-dynamic-tools": () => createInProcessToolServer(registry),
-			"phantom-scheduler": () => createSchedulerToolServer(scheduler as Scheduler),
-			"phantom-web-ui": () => createWebUiToolServer(config.public_url),
-			"phantom-secrets": () => createSecretToolServer({ db, baseUrl: secretsBaseUrl }),
-			...(process.env.RESEND_API_KEY
+		const emailDeps = process.env.RESEND_API_KEY
+			? { agentName: config.name, domain: config.domain ?? "ghostwright.dev", dailyLimit: Number(process.env.PHANTOM_EMAIL_DAILY_LIMIT) || 50 }
+			: null;
+
+		// Pass factories (not singletons) — каждый запрос получает свежий ToolHandler.
+		runtime.setToolHandlerFactories({
+			"phantom-dynamic-tools": (): ToolHandler => ({
+				declarations: dynamicToolDeclarations,
+				handle: (name, args) => handleDynamicToolCall(name, args, registry),
+			}),
+			"phantom-scheduler": (): ToolHandler => ({
+				declarations: schedulerDeclarations,
+				handle: (name, args) => handleSchedulerToolCall(name, args, scheduler as Scheduler),
+			}),
+			"phantom-web-ui": (): ToolHandler => ({
+				declarations: webUiDeclarations,
+				handle: (name, args) => handleWebUiToolCall(name, args, config.public_url),
+			}),
+			"phantom-secrets": (): ToolHandler => ({
+				declarations: secretsDeclarations,
+				handle: (name, args) => handleSecretsToolCall(name, args, { db, baseUrl: secretsBaseUrl }),
+			}),
+			...(emailDeps
 				? {
-						"phantom-email": () =>
-							createEmailToolServer({
-								agentName: config.name,
-								domain: config.domain ?? "ghostwright.dev",
-								dailyLimit: Number(process.env.PHANTOM_EMAIL_DAILY_LIMIT) || 50,
-							}),
+						"phantom-email": (): ToolHandler => ({
+							declarations: createEmailDeclarations(emailDeps),
+							handle: (name, args) => handleEmailToolCall(name, args, emailDeps),
+						}),
 					}
 				: {}),
 		});

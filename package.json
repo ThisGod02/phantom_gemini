@@ -16,8 +16,7 @@
     "format": "biome format --write src/"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.77",
-    "@anthropic-ai/sdk": "^0.80.0",
+    "@google/genai": "^1.48.0",
     "@modelcontextprotocol/sdk": "^1.28.0",
     "@slack/bolt": "^4.6.0",
     "croner": "^10.0.1",

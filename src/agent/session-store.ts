@@ -1,9 +1,10 @@
 import type { Database } from "bun:sqlite";
+import type { Content } from "@google/genai";
 
 export type Session = {
 	id: number;
 	session_key: string;
-	sdk_session_id: string | null;
+	chat_history: string | null; // JSON-сериализованный Content[]
 	channel_id: string;
 	conversation_id: string;
 	status: string;
@@ -27,19 +28,54 @@ export class SessionStore {
 	create(channelId: string, conversationId: string): Session {
 		const sessionKey = `${channelId}:${conversationId}`;
 
-		// Upsert: if an expired row with this key exists, reactivate it
-		// instead of failing on the UNIQUE constraint.
+		// Upsert: если уже есть истёкшая запись — реактивируем, не создаём новую.
 		this.db.run(
 			`INSERT INTO sessions (session_key, channel_id, conversation_id)
 			 VALUES (?, ?, ?)
 			 ON CONFLICT(session_key) DO UPDATE SET
 			   status = 'active',
-			   sdk_session_id = NULL,
 			   last_active_at = datetime('now')`,
 			[sessionKey, channelId, conversationId],
 		);
 
 		return this.getByKey(sessionKey) as Session;
+	}
+
+	/**
+	 * Возвращает историю чата из SQLite (десериализованный Content[]).
+	 * Пустой массив если истории нет или сессия новая.
+	 */
+	getHistory(sessionKey: string): Content[] {
+		const session = this.getByKey(sessionKey);
+		if (!session?.chat_history) return [];
+		try {
+			return JSON.parse(session.chat_history) as Content[];
+		} catch {
+			return [];
+		}
+	}
+
+	/**
+	 * Сохраняет историю чата в SQLite (JSON TEXT).
+	 * Обрезает до MAX_HISTORY_TURNS чтобы не разрастаться бесконечно.
+	 */
+	saveHistory(sessionKey: string, history: Content[]): void {
+		const MAX_HISTORY_TURNS = 200;
+		const trimmed = history.slice(-MAX_HISTORY_TURNS);
+		this.db.run(
+			`UPDATE sessions SET chat_history = ?, last_active_at = datetime('now') WHERE session_key = ?`,
+			[JSON.stringify(trimmed), sessionKey],
+		);
+	}
+
+	/**
+	 * Удаляет историю чата (например при ошибке «conversation not found»).
+	 */
+	clearHistory(sessionKey: string): void {
+		this.db.run(
+			`UPDATE sessions SET chat_history = NULL, last_active_at = datetime('now') WHERE session_key = ?`,
+			[sessionKey],
+		);
 	}
 
 	getByKey(sessionKey: string): Session | null {
@@ -61,21 +97,7 @@ export class SessionStore {
 		return session;
 	}
 
-	updateSdkSessionId(sessionKey: string, sdkSessionId: string): void {
-		this.db.run(
-			`UPDATE sessions SET sdk_session_id = ?, last_active_at = datetime('now')
-			 WHERE session_key = ?`,
-			[sdkSessionId, sessionKey],
-		);
-	}
-
-	clearSdkSessionId(sessionKey: string): void {
-		this.db.run(
-			`UPDATE sessions SET sdk_session_id = NULL, last_active_at = datetime('now')
-			 WHERE session_key = ?`,
-			[sessionKey],
-		);
-	}
+// sdk_session_id удалён — теперь используется chat_history (Content[] в SQLite)
 
 	touch(sessionKey: string): void {
 		this.db.run("UPDATE sessions SET last_active_at = datetime('now') WHERE session_key = ?", [sessionKey]);

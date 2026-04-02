@@ -21,7 +21,7 @@ export const EvolutionConfigSchema = z.object({
 		.default({}),
 	reflection: z
 		.object({
-			model: z.string().default("claude-sonnet-4-20250514"),
+			model: z.string().default("gemini-2.5-flash"),
 			effort: z.enum(["low", "medium", "high", "max"]).default("high"),
 			max_budget_usd: z.number().positive().default(0.5),
 		})

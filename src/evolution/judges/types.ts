@@ -1,6 +1,11 @@
-export const JUDGE_MODEL_SONNET = "claude-sonnet-4-6";
-export const JUDGE_MODEL_HAIKU = "claude-haiku-4-5";
-export const JUDGE_MODEL_OPUS = "claude-opus-4-6";
+export const JUDGE_MODEL_FLASH = "gemini-2.5-flash";
+export const JUDGE_MODEL_FLASH_LITE = "gemini-2.0-flash-lite";
+export const JUDGE_MODEL_PRO = "gemini-2.5-pro";
+
+// Aliases for backward compatibility with evolution engine callers
+export const JUDGE_MODEL_SONNET = JUDGE_MODEL_FLASH;
+export const JUDGE_MODEL_HAIKU = JUDGE_MODEL_FLASH_LITE;
+export const JUDGE_MODEL_OPUS = JUDGE_MODEL_PRO;
 
 export const JUDGE_TIMEOUT_MS = 30_000;
 export const JUDGE_MAX_TOKENS = 4096;

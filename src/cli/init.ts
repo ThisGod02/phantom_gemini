@@ -302,7 +302,7 @@ export async function runInit(args: string[]): Promise<void> {
 	}
 
 	console.log("\nNext steps:");
-	console.log("  1. Set ANTHROPIC_API_KEY in your environment");
+	console.log("  1. Set GOOGLE_API_KEY in your environment");
 	console.log("  2. Start Docker services: docker compose up -d");
 	console.log("  3. Start Phantom: phantom start");
 	console.log("  4. Connect from Claude Code:");

@@ -13,18 +13,18 @@ describe("buildSafeEnv", () => {
 		expect(Object.keys(env)).toHaveLength(5);
 	});
 
-	test("does not include ANTHROPIC_API_KEY", () => {
-		const origKey = process.env.ANTHROPIC_API_KEY;
-		process.env.ANTHROPIC_API_KEY = "sk-ant-test-key-should-not-leak";
+	test("does not include GOOGLE_API_KEY", () => {
+		const origKey = process.env.GOOGLE_API_KEY;
+		process.env.GOOGLE_API_KEY = "AIzatest-key-should-not-leak";
 		try {
 			const env = buildSafeEnv({});
-			expect(env.ANTHROPIC_API_KEY).toBeUndefined();
-			expect(JSON.stringify(env)).not.toContain("sk-ant-test-key-should-not-leak");
+			expect(env.GOOGLE_API_KEY).toBeUndefined();
+			expect(JSON.stringify(env)).not.toContain("AIzatest-key-should-not-leak");
 		} finally {
 			if (origKey !== undefined) {
-				process.env.ANTHROPIC_API_KEY = origKey;
+				process.env.GOOGLE_API_KEY = origKey;
 			} else {
-				process.env.ANTHROPIC_API_KEY = undefined;
+				process.env.GOOGLE_API_KEY = undefined;
 			}
 		}
 	});
@@ -69,20 +69,20 @@ describe("executeDynamicHandler", () => {
 			description: "test",
 			inputSchema: {},
 			handlerType: "shell",
-			handlerCode: "echo $ANTHROPIC_API_KEY",
+			handlerCode: "echo $GOOGLE_API_KEY",
 		};
 
-		const origKey = process.env.ANTHROPIC_API_KEY;
-		process.env.ANTHROPIC_API_KEY = "sk-ant-test-key-should-not-leak";
+		const origKey = process.env.GOOGLE_API_KEY;
+		process.env.GOOGLE_API_KEY = "AIzatest-key-should-not-leak";
 		try {
 			const result = await executeDynamicHandler(tool, {});
 			const text = (result.content[0] as { type: string; text: string }).text;
-			expect(text).not.toContain("sk-ant-test-key-should-not-leak");
+			expect(text).not.toContain("AIzatest-key-should-not-leak");
 		} finally {
 			if (origKey !== undefined) {
-				process.env.ANTHROPIC_API_KEY = origKey;
+				process.env.GOOGLE_API_KEY = origKey;
 			} else {
-				process.env.ANTHROPIC_API_KEY = undefined;
+				process.env.GOOGLE_API_KEY = undefined;
 			}
 		}
 	});
@@ -133,7 +133,7 @@ describe("executeDynamicHandler", () => {
 
 	test("script handler does not expose API keys", async () => {
 		const tmpFile = "/tmp/phantom-test-env-leak.ts";
-		await Bun.write(tmpFile, 'console.log(process.env.ANTHROPIC_API_KEY ?? "NOT_SET")');
+		await Bun.write(tmpFile, 'console.log(process.env.GOOGLE_API_KEY ?? "NOT_SET")');
 
 		const tool: DynamicToolDef = {
 			name: "test_script_env_leak",
@@ -143,18 +143,18 @@ describe("executeDynamicHandler", () => {
 			handlerPath: tmpFile,
 		};
 
-		const origKey = process.env.ANTHROPIC_API_KEY;
-		process.env.ANTHROPIC_API_KEY = "sk-ant-test-key-should-not-leak";
+		const origKey = process.env.GOOGLE_API_KEY;
+		process.env.GOOGLE_API_KEY = "AIzatest-key-should-not-leak";
 		try {
 			const result = await executeDynamicHandler(tool, {});
 			const text = (result.content[0] as { type: string; text: string }).text;
-			expect(text).not.toContain("sk-ant-test-key-should-not-leak");
+			expect(text).not.toContain("AIzatest-key-should-not-leak");
 			expect(text).toBe("NOT_SET");
 		} finally {
 			if (origKey !== undefined) {
-				process.env.ANTHROPIC_API_KEY = origKey;
+				process.env.GOOGLE_API_KEY = origKey;
 			} else {
-				process.env.ANTHROPIC_API_KEY = undefined;
+				process.env.GOOGLE_API_KEY = undefined;
 			}
 		}
 	});

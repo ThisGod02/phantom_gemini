@@ -1,7 +1,5 @@
-import Anthropic from "@anthropic-ai/sdk";
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
-// zod/v4 required: matches schemas.ts for zodOutputFormat compatibility
-import type { z } from "zod/v4";
+import { GoogleGenAI } from "@google/genai";
+import { z } from "zod";
 import {
 	JUDGE_MAX_TOKENS,
 	JUDGE_TEMPERATURE,
@@ -10,27 +8,27 @@ import {
 	type VotingStrategy,
 } from "./types.ts";
 
-let _client: Anthropic | null = null;
+let _client: GoogleGenAI | null = null;
 
-function getClient(): Anthropic {
+function getClient(): GoogleGenAI {
 	if (!_client) {
-		_client = new Anthropic();
+		_client = new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY });
 	}
 	return _client;
 }
 
-// Visible for testing - allows injecting a mock client
-export function setClient(client: Anthropic | null): void {
+// Visible for testing — allows injecting a mock client
+export function setClient(client: GoogleGenAI | null): void {
 	_client = client;
 }
 
 export function isJudgeAvailable(): boolean {
-	return !!process.env.ANTHROPIC_API_KEY;
+	return !!process.env.GOOGLE_API_KEY;
 }
 
 /**
  * Call a single LLM judge with structured output.
- * Uses the raw Anthropic SDK (not the Agent SDK).
+ * Uses @google/genai with JSON mode (responseMimeType: "application/json").
  * Temperature 0 for deterministic judging.
  */
 export async function callJudge<T>(options: {
@@ -44,29 +42,37 @@ export async function callJudge<T>(options: {
 	const client = getClient();
 	const startTime = Date.now();
 
-	const message = await client.messages.parse({
+	// Hint the JSON structure via system prompt since Gemini's responseSchema
+	// uses its own Schema format (not JSON Schema). The model is very reliable
+	// at following JSON instructions with responseMimeType set.
+	const schemaHint = buildSchemaHint(options.schema);
+	const enhancedSystem = `${options.systemPrompt}\n\nRespond with a JSON object following this structure:\n${schemaHint}`;
+
+	const response = await client.models.generateContent({
 		model: options.model,
-		max_tokens: options.maxTokens ?? JUDGE_MAX_TOKENS,
-		temperature: JUDGE_TEMPERATURE,
-		system: options.systemPrompt,
-		messages: [{ role: "user", content: options.userMessage }],
-		output_config: {
-			// Cast needed: SDK .d.ts references zod v3 types but runtime uses zod/v4
-			// biome-ignore lint/suspicious/noExplicitAny: bridging zod v3/v4 type mismatch
-			format: zodOutputFormat(options.schema as any),
+		contents: [{ role: "user", parts: [{ text: options.userMessage }] }],
+		config: {
+			systemInstruction: enhancedSystem,
+			temperature: JUDGE_TEMPERATURE,
+			maxOutputTokens: options.maxTokens ?? JUDGE_MAX_TOKENS,
+			responseMimeType: "application/json",
 		},
 	});
 
-	const parsed = message.parsed_output;
-	if (!parsed) {
-		throw new Error(`Judge returned no structured output (stop_reason: ${message.stop_reason})`);
+	const rawText = response.text ?? "";
+	let parsed: T;
+	try {
+		const rawJson = JSON.parse(rawText);
+		parsed = options.schema.parse(rawJson);
+	} catch (err: unknown) {
+		const msg = err instanceof Error ? err.message : String(err);
+		throw new Error(`Judge returned invalid JSON or schema mismatch: ${msg}\nRaw: ${rawText.slice(0, 500)}`);
 	}
 
-	const inputTokens = message.usage.input_tokens;
-	const outputTokens = message.usage.output_tokens;
+	const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;
+	const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
 	const costUsd = estimateCost(options.model, inputTokens, outputTokens);
 
-	// Extract verdict and confidence from the parsed data if present
 	const data = parsed as Record<string, unknown>;
 	const verdict = (data.verdict as "pass" | "fail") ?? "pass";
 	const confidence = (data.confidence as number) ?? 1.0;
@@ -105,7 +111,6 @@ export async function multiJudge<T>(
 
 	switch (strategy) {
 		case "minority_veto": {
-			// Any judge that fails with sufficient confidence vetoes
 			const vetoes = results.filter((r) => r.verdict === "fail" && r.confidence >= confidenceThreshold);
 			const verdict = vetoes.length > 0 ? "fail" : "pass";
 			const reasoning =
@@ -113,39 +118,20 @@ export async function multiJudge<T>(
 					? `Vetoed by ${vetoes.length}/${results.length} judge(s): ${vetoes.map((v) => v.reasoning).join(" | ")}`
 					: `All ${results.length} judges passed.`;
 			const avgConfidence = results.reduce((sum, r) => sum + r.confidence, 0) / results.length;
-
-			return {
-				verdict,
-				confidence: avgConfidence,
-				reasoning,
-				individualResults: results,
-				strategy,
-				costUsd: totalCost,
-				durationMs: Date.now() - startTime,
-			};
+			return { verdict, confidence: avgConfidence, reasoning, individualResults: results, strategy, costUsd: totalCost, durationMs: Date.now() - startTime };
 		}
 
 		case "majority": {
 			const passCount = results.filter((r) => r.verdict === "pass").length;
 			const verdict = passCount > results.length / 2 ? "pass" : "fail";
 			const avgConfidence = results.reduce((sum, r) => sum + r.confidence, 0) / results.length;
-
-			return {
-				verdict,
-				confidence: avgConfidence,
-				reasoning: `${passCount}/${results.length} judges voted pass.`,
-				individualResults: results,
-				strategy,
-				costUsd: totalCost,
-				durationMs: Date.now() - startTime,
-			};
+			return { verdict, confidence: avgConfidence, reasoning: `${passCount}/${results.length} judges voted pass.`, individualResults: results, strategy, costUsd: totalCost, durationMs: Date.now() - startTime };
 		}
 
 		case "unanimous": {
 			const allPass = results.every((r) => r.verdict === "pass");
 			const verdict = allPass ? "pass" : "fail";
 			const minConfidence = Math.min(...results.map((r) => r.confidence));
-
 			return {
 				verdict,
 				confidence: minConfidence,
@@ -162,23 +148,45 @@ export async function multiJudge<T>(
 }
 
 /**
+ * Строит строковую подсказку структуры из Zod-схемы для системного промпта.
+ * Gemini самостоятельно следует JSON-инструкциям при responseMimeType: "application/json".
+ */
+function buildSchemaHint(schema: z.ZodType): string {
+	try {
+		// Используем zod _def чтобы получить описание полей
+		const def = (schema as unknown as { _def: { shape?: () => Record<string, { description?: string }> } })._def;
+		if (def?.shape) {
+			const shape = def.shape();
+			const fields = Object.entries(shape).map(([key, field]) => {
+				const desc = (field as { description?: string }).description ?? "";
+				return `  "${key}": ... // ${desc}`;
+			});
+			return `{\n${fields.join(",\n")}\n}`;
+		}
+	} catch {
+		// Fallback
+	}
+	return "{ ... } // Follow the judge schema";
+}
+
+/**
  * Estimate USD cost from token counts.
- * Pricing as of March 2026.
+ * Gemini pricing as of April 2026.
  */
 function estimateCost(model: string, inputTokens: number, outputTokens: number): number {
 	let inputPer1M: number;
 	let outputPer1M: number;
 
-	if (model.includes("opus")) {
-		inputPer1M = 5.0;
-		outputPer1M = 25.0;
-	} else if (model.includes("haiku")) {
-		inputPer1M = 1.0;
-		outputPer1M = 5.0;
+	if (model.includes("pro")) {
+		inputPer1M = 1.25;
+		outputPer1M = 10.0;
+	} else if (model.includes("lite")) {
+		inputPer1M = 0.075;
+		outputPer1M = 0.30;
 	} else {
-		// Sonnet default
-		inputPer1M = 3.0;
-		outputPer1M = 15.0;
+		// flash default
+		inputPer1M = 0.15;
+		outputPer1M = 0.60;
 	}
 
 	return (inputTokens / 1_000_000) * inputPer1M + (outputTokens / 1_000_000) * outputPer1M;

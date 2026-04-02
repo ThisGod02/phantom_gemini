@@ -100,14 +100,14 @@ function makeSession(overrides: Partial<SessionSummary> = {}): SessionSummary {
 
 describe("Cost Cap", () => {
 	beforeEach(() => {
-		savedApiKey = process.env.ANTHROPIC_API_KEY;
+		savedApiKey = process.env.GOOGLE_API_KEY;
 	});
 
 	afterEach(() => {
 		if (savedApiKey !== undefined) {
-			process.env.ANTHROPIC_API_KEY = savedApiKey;
+			process.env.GOOGLE_API_KEY = savedApiKey;
 		} else {
-			process.env.ANTHROPIC_API_KEY = undefined;
+			process.env.GOOGLE_API_KEY = undefined;
 		}
 		rmSync(TEST_DIR, { recursive: true, force: true });
 	});
