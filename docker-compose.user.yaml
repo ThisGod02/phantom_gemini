@@ -18,7 +18,8 @@ services:
   # Pulls the pre-built image from Docker Hub. No build step needed.
   # =========================================================================
   phantom:
-    image: ghostwright/phantom:latest
+    build: .
+    image: phantom-local:latest
     container_name: phantom
     ports:
       - "${PORT:-3100}:3100"

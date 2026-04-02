@@ -23,7 +23,9 @@ export function setClient(client: LLMProvider | null): void {
 }
 
 export function isJudgeAvailable(): boolean {
-	return !!process.env.GOOGLE_API_KEY;
+	const provider = process.env.PHANTOM_PROVIDER || "google";
+	const apiKey = provider === "openai" ? process.env.ROUTERAI_API_KEY : process.env.GOOGLE_API_KEY;
+	return !!apiKey;
 }
 
 /**
