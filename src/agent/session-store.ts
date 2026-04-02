@@ -49,7 +49,35 @@ export class SessionStore {
 		const session = this.getByKey(sessionKey);
 		if (!session?.chat_history) return [];
 		try {
-			return JSON.parse(session.chat_history) as Content[];
+			const history = JSON.parse(session.chat_history) as Content[];
+			const HISTORY_CHAR_BUDGET = 60000; // ~15,000 tokens
+			const MAX_CHAR_PER_MSG = 5000;
+			
+			let currentBudget = HISTORY_CHAR_BUDGET;
+			const result: Content[] = [];
+
+			// Work backwards to keep newest messages within budget
+			for (let i = history.length - 1; i >= 0; i--) {
+				const msg = history[i];
+				if (!msg.parts) continue;
+
+				const processedParts = msg.parts.map(part => {
+					if (part.text && part.text.length > MAX_CHAR_PER_MSG) {
+						return { text: part.text.slice(0, MAX_CHAR_PER_MSG) + "\n\n[... message truncated in history ...]" };
+					}
+					return part;
+				});
+
+				const msgLen = processedParts.reduce((sum, p) => sum + (p.text?.length ?? 0), 0);
+				
+				if (currentBudget - msgLen > 0 || result.length < 2) { // Always keep at least 2 messages
+					result.unshift({ ...msg, parts: processedParts });
+					currentBudget -= msgLen;
+				} else {
+					break;
+				}
+			}
+			return result;
 		} catch {
 			return [];
 		}
@@ -57,10 +85,10 @@ export class SessionStore {
 
 	/**
 	 * Сохраняет историю чата в SQLite (JSON TEXT).
-	 * Обрезает до MAX_HISTORY_TURNS чтобы не разрастаться бесконечно.
+	 * Обрезает до разумного предела чтобы база не пухла.
 	 */
 	saveHistory(sessionKey: string, history: Content[]): void {
-		const MAX_HISTORY_TURNS = 20;
+		const MAX_HISTORY_TURNS = 100; // Max turns to store on disk
 		const trimmed = history.slice(-MAX_HISTORY_TURNS);
 		this.db.run(
 			`UPDATE sessions SET chat_history = ?, last_active_at = datetime('now') WHERE session_key = ?`,
