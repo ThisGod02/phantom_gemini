@@ -1,32 +1,33 @@
 import {
 	FunctionCallingConfigMode,
-	GoogleGenAI,
 	type Content,
 	type Tool,
 } from "@google/genai";
 import type { LLMProvider, ProviderResponse } from "./types.ts";
 
+const GEMINI_API_BASE = "https://generativelanguage.googleapis.com";
+
 /**
- * GeminiCliProvider leverages the official @google/genai SDK to provide high-limit 
- * agentic sessions with Google Search grounding and OAuth support.
+ * GeminiCliProvider uses the Gemini REST API directly with a Bearer token.
+ * 
+ * The @google/genai Node SDK always injects its own NodeAuth/ADC credentials
+ * which overrides any manually set headers. The only reliable way to use a
+ * personal OAuth token is to make raw fetch() calls to the REST API directly.
  * 
  * When no GOOGLE_API_KEY is set, it reads the cached OAuth token from
- * ~/.gemini/oauth_creds.json (written by `bun run src/cli/main.ts login`) and
- * passes it via httpOptions.headers, exactly the same way the official
- * gemini-cli tool authenticates with the Generative Language API.
+ * ~/.gemini/oauth_creds.json (written by `bun run src/cli/main.ts login`).
  */
 export class GeminiCliProvider implements LLMProvider {
-	private client: GoogleGenAI;
+	private apiKey?: string;
+	private accessToken?: string;
 	private options: { enableSearch?: boolean };
 
 	constructor(apiKey?: string, options?: { enableSearch?: boolean }) {
 		this.options = options || {};
-		
-		const finalApiKey = apiKey || process.env.GOOGLE_API_KEY;
-		let accessToken: string | undefined;
+		this.apiKey = apiKey || process.env.GOOGLE_API_KEY;
 
 		// If no API key, try to load OAuth token from Gemini CLI config
-		if (!finalApiKey) {
+		if (!this.apiKey) {
 			try {
 				const os = require('os');
 				const fs = require('fs');
@@ -37,30 +38,27 @@ export class GeminiCliProvider implements LLMProvider {
 				if (fs.existsSync(credsPath)) {
 					const creds = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
 					if (creds.access_token) {
-						accessToken = creds.access_token;
+						this.accessToken = creds.access_token;
+						console.log(`[gemini-cli] OAuth session active (token detected)`);
 					}
 				}
 			} catch (e) {
 				// Silent fail
 			}
 		}
+	}
 
-		if (accessToken) {
-			console.log(`[gemini-cli] OAuth session active (token detected)`);
-			// This is exactly how the official gemini-cli tool passes its OAuth token:
-			// via httpOptions.headers — no apiKey, no vertexai mode needed.
-			this.client = new GoogleGenAI({
-				apiKey: undefined,
-				httpOptions: {
-					headers: {
-						'Authorization': `Bearer ${accessToken}`,
-					}
-				}
-			} as any);
-		} else {
-			// Standard API key mode
-			this.client = new GoogleGenAI({ apiKey: finalApiKey });
+	private getAuthHeaders(): Record<string, string> {
+		if (this.accessToken) {
+			return { 'Authorization': `Bearer ${this.accessToken}` };
 		}
+		return {};
+	}
+
+	private getApiVersionAndUrl(model: string): { url: string; apiVersion: string } {
+		const apiVersion = "v1beta";
+		const url = `${GEMINI_API_BASE}/${apiVersion}/models/${model}:generateContent`;
+		return { url, apiVersion };
 	}
 
 	async generateContent(
@@ -75,11 +73,10 @@ export class GeminiCliProvider implements LLMProvider {
 		// Add Google Search grounding if enabled
 		if (this.options.enableSearch) {
 			finalTools.push({
-				// @ts-ignore - googleSearchRetrieval is standard in v1/v1beta
-				google_search_retrieval: {
-					dynamic_retrieval_config: {
+				googleSearchRetrieval: {
+					dynamicRetrievalConfig: {
 						mode: "MODE_DYNAMIC",
-						dynamic_threshold: 0.3,
+						dynamicThreshold: 0.3,
 					},
 				},
 			} as any);
@@ -88,49 +85,90 @@ export class GeminiCliProvider implements LLMProvider {
 		// Map model name and check for invalid versions
 		let modelName = model.replace('google/', '');
 		if (modelName.startsWith('gemini-3')) {
-			console.warn(`[gemini-cli] WARNING: Model "${modelName}" is likely invalid. Defaulting to "gemini-2.0-flash" to avoid 404.`);
+			console.warn(`[gemini-cli] WARNING: Model "${modelName}" is likely invalid. Defaulting to "gemini-2.0-flash".`);
 			modelName = "gemini-2.0-flash";
 		}
 
-		// Use the official model.generateContent API
-		const response = await this.client.models.generateContent({
-			model: modelName,
-			contents,
-			config: {
-				systemInstruction,
-				tools: finalTools,
-				toolConfig: { 
-					functionCallingConfig: { 
-						mode: FunctionCallingConfigMode.AUTO 
-					} 
-				},
-				responseMimeType: options?.responseMimeType,
-			},
-		});
+		const { url } = this.getApiVersionAndUrl(modelName);
 
-		let functionCalls;
-		if (response.functionCalls && response.functionCalls.length > 0) {
-			functionCalls = response.functionCalls.map(c => ({
-				name: c.name ?? "",
-				args: (c.args ?? {}) as Record<string, unknown>
-			}));
+		// Build request body (REST API format)
+		const requestBody: any = {
+			contents,
+			generationConfig: {
+				...(options?.responseMimeType && { responseMimeType: options.responseMimeType }),
+			},
+			tools: finalTools.length > 0 ? finalTools : undefined,
+			toolConfig: finalTools.length > 0 ? {
+				functionCallingConfig: { mode: "AUTO" }
+			} : undefined,
+		};
+
+		if (systemInstruction) {
+			requestBody.systemInstruction = { parts: [{ text: systemInstruction }] };
 		}
 
+		// Build headers
+		const headers: Record<string, string> = {
+			'Content-Type': 'application/json',
+			...this.getAuthHeaders(),
+		};
+
+		// If using API key (not OAuth), append it as query param (standard way)
+		const requestUrl = this.apiKey
+			? `${url}?key=${this.apiKey}`
+			: url;
+
+		const res = await fetch(requestUrl, {
+			method: 'POST',
+			headers,
+			body: JSON.stringify(requestBody),
+		});
+
+		if (!res.ok) {
+			const errorText = await res.text();
+			throw new Error(errorText);
+		}
+
+		const data = await res.json() as any;
+
+		// Parse response
+		const candidate = data.candidates?.[0];
+		const content = candidate?.content;
+		const parts = content?.parts || [];
+
+		let text: string | undefined;
+		let functionCalls: Array<{ name: string; args: Record<string, unknown> }> | undefined;
+
+		for (const part of parts) {
+			if (part.text) {
+				text = (text || '') + part.text;
+			}
+			if (part.functionCall) {
+				if (!functionCalls) functionCalls = [];
+				functionCalls.push({
+					name: part.functionCall.name ?? "",
+					args: (part.functionCall.args ?? {}) as Record<string, unknown>,
+				});
+			}
+		}
+
+		const usageMeta = data.usageMetadata;
+
 		return {
-			text: response.text ?? undefined,
-			usageMetadata: response.usageMetadata ? {
-				promptTokenCount: response.usageMetadata.promptTokenCount ?? 0,
-				candidatesTokenCount: response.usageMetadata.candidatesTokenCount ?? 0,
+			text,
+			usageMetadata: usageMeta ? {
+				promptTokenCount: usageMeta.promptTokenCount ?? 0,
+				candidatesTokenCount: usageMeta.candidatesTokenCount ?? 0,
 			} : undefined,
 			functionCalls,
-			rawContentToAppend: response.candidates?.[0]?.content,
+			rawContentToAppend: content,
 		};
 	}
 
 	estimateCost(model: string, inputTokens: number, outputTokens: number): number {
 		// If using OAuth Account Login, the cost is covered by a subscription 
 		// (Google One / GCA) - so we report 0 to avoid confusing the user.
-		if (!process.env.GOOGLE_API_KEY) {
+		if (!this.apiKey) {
 			return 0;
 		}
 
