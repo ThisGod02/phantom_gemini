@@ -24,6 +24,7 @@ export interface LLMProvider {
 		contents: Content[],
 		systemInstruction: string,
 		tools: Tool[],
+		options?: { responseMimeType?: string },
 	): Promise<ProviderResponse>;
 
 	estimateCost(model: string, inputTokens: number, outputTokens: number): number;

@@ -35,7 +35,8 @@ export const Observation = z.object({
 			"Which config files should change? Options: persona.md, user-profile.md, " +
 				"domain-knowledge.md, strategies/task-patterns.md, strategies/tool-preferences.md, " +
 				"strategies/error-recovery.md",
-		),
+		)
+		.default([]),
 });
 
 export const ObservationExtractionResult = z.object({
@@ -145,17 +146,18 @@ export type RegressionGateResultType = z.infer<typeof RegressionGateResult>;
 
 export const ExtractedFact = z.object({
 	natural_language: z.string().describe("The fact expressed in clear natural language."),
-	subject: z.string(),
-	predicate: z.string(),
-	object: z.string(),
+	subject: z.string().default("unknown"),
+	predicate: z.string().default("related_to"),
+	object: z.string().default("unknown"),
 	category: z.enum(["user_preference", "domain_knowledge", "team", "codebase", "process", "tool"]),
 	confidence: z
 		.number()
 		.min(0)
 		.max(1)
-		.describe("How confident this is a real, stable fact? 0.3 = possibly, 0.6 = likely, 0.9 = certain."),
-	evidence: z.string().describe("Quote from the session supporting this fact."),
-	is_update: z.boolean().describe("Does this update or contradict a previously known fact?"),
+		.describe("How confident this is a real, stable fact? 0.3 = possibly, 0.6 = likely, 0.9 = certain.")
+		.default(0.5),
+	evidence: z.string().describe("Quote from the session supporting this fact.").default("Context inferred from session"),
+	is_update: z.boolean().describe("Does this update or contradict a previously known fact?").default(false),
 	contradicted_fact: z.string().optional().describe("If is_update=true, the previous fact being updated."),
 });
 

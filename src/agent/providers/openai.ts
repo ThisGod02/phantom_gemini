@@ -18,6 +18,7 @@ export class OpenAIProvider implements LLMProvider {
 		contents: Content[],
 		systemInstruction: string,
 		tools: Tool[],
+		options?: { responseMimeType?: string },
 	): Promise<ProviderResponse> {
 		const messages: ChatCompletionMessageParam[] = [];
 
@@ -110,7 +111,7 @@ export class OpenAIProvider implements LLMProvider {
 			messages,
 			tools: openaiTools.length > 0 ? openaiTools : undefined,
 			tool_choice: openaiTools.length > 0 ? "auto" : undefined,
-			response_format: { type: "json_object" },
+			...(options?.responseMimeType === "application/json" ? { response_format: { type: "json_object" } } : {}),
 		});
 
 		const choice = response.choices[0];

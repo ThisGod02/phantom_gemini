@@ -58,17 +58,19 @@ export async function callJudge<T>(options: {
 		resolvedModel,
 		[{ role: "user", parts: [{ text: options.userMessage }] }],
 		enhancedSystem,
-		[] // no tools for judges
+		[], // no tools for judges
+		{ responseMimeType: "application/json" }
 	);
 
-	const rawText = response.text ?? "";
-	let parsed: T;
+	const text = response.text || "{}";
+	let parsed: any;
 	try {
-		const rawJson = JSON.parse(rawText);
-		parsed = options.schema.parse(rawJson);
-	} catch (err: unknown) {
+		const raw = JSON.parse(text);
+		parsed = normalizeJudgeResponse(raw);
+		parsed = options.schema.parse(parsed);
+	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
-		throw new Error(`Judge returned invalid JSON or schema mismatch: ${msg}\nRaw: ${rawText.slice(0, 500)}`);
+		throw new Error(`Judge returned invalid JSON or schema mismatch: ${msg}\nRaw: ${text.slice(0, 500)}`);
 	}
 
 	const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;
@@ -153,6 +155,56 @@ export async function multiJudge<T>(
  * Строит строковую подсказку структуры из Zod-схемы для системного промпта.
  * Gemini самостоятельно следует JSON-инструкциям при responseMimeType: "application/json".
  */
+function normalizeJudgeResponse(data: any): any {
+	if (!data || typeof data !== "object") return data;
+
+	if (Array.isArray(data)) {
+		return data.map(normalizeJudgeResponse);
+	}
+
+	const normalized: any = {};
+	for (const [key, value] of Object.entries(data)) {
+		let newKey = key;
+		
+		// Map common model hallucinations for field names
+		const keyMap: Record<string, string> = {
+			"fact": "natural_language",
+			"content": "detail",
+			"observation": "summary",
+			"importance_level": "importance",
+			"reason": "reasoning",
+			"outcome": "session_outcome",
+		};
+
+		if (keyMap[key]) {
+			newKey = keyMap[key];
+		}
+
+		// Recursively normalize children
+		normalized[newKey] = normalizeJudgeResponse(value);
+	}
+
+	// Post-process specific enums or structures that models often get wrong
+	if (normalized.category && typeof normalized.category === "string") {
+		const catMap: Record<string, string> = {
+			"process knowledge": "process",
+			"tool insights": "tool",
+			"user preference": "user_preference",
+			"domain knowledge": "domain_knowledge",
+		};
+		const lower = normalized.category.toLowerCase();
+		if (catMap[lower]) normalized.category = catMap[lower];
+	}
+
+	if (normalized.session_outcome && typeof normalized.session_outcome === "string") {
+		const lower = normalized.session_outcome.toLowerCase();
+		if (lower.includes("success")) normalized.session_outcome = "success";
+		else if (lower.includes("fail")) normalized.session_outcome = "failure";
+	}
+
+	return normalized;
+}
+
 function buildSchemaHint(schema: z.ZodType): string {
 	try {
 		// Use zod-to-json-schema like logic to build a helpful template

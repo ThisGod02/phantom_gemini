@@ -13,6 +13,7 @@ export class GeminiProvider implements LLMProvider {
 		contents: Content[],
 		systemInstruction: string,
 		tools: Tool[],
+		options?: { responseMimeType?: string },
 	): Promise<ProviderResponse> {
 		// Detect max logic
 		const isMax = process.env.PHANTOM_EFFORT === 'max' || model.includes('pro');
@@ -25,6 +26,7 @@ export class GeminiProvider implements LLMProvider {
 				tools,
 				toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.AUTO } },
 				...(isMax ? { maxOutputTokens: 8192 } : {}),
+				responseMimeType: options?.responseMimeType,
 			},
 		});
 
