@@ -37,6 +37,7 @@ export function createSession(): { sessionToken: string; magicToken: string } {
 		used: false,
 	});
 
+	console.log(`[session] Created Magic Link: ${magicToken.slice(0, 8)}... (Total: ${magicLinks.size})`);
 	return { sessionToken, magicToken };
 }
 

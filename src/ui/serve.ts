@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 import { relative, resolve } from "node:path";
 import { createSSEResponse } from "./events.ts";
 import { loginPageHtml } from "./login-page.ts";
-import { consumeMagicLink, createSession, isValidSession } from "./session.ts";
+import { consumeMagicLink, createSession, getMagicLinkCount, isValidSession } from "./session.ts";
 
 import { secretsExpiredHtml, secretsFormHtml } from "../secrets/form-page.ts";
 import { getSecretRequest, saveSecrets, validateMagicToken } from "../secrets/store.ts";
@@ -248,9 +248,12 @@ async function handleLoginPost(req: Request): Promise<Response> {
 		return Response.json({ error: "Token is required" }, { status: 400 });
 	}
 
+	console.log(`[ui] Login attempt with token: ${body.token.slice(0, 8)}...`);
+
 	// Try as magic link token first
 	const sessionToken = consumeMagicLink(body.token);
 	if (sessionToken) {
+		console.log(`[ui] Login success: Magic link consumed.`);
 		return new Response(JSON.stringify({ ok: true }), {
 			headers: {
 				"Content-Type": "application/json",
@@ -261,6 +264,7 @@ async function handleLoginPost(req: Request): Promise<Response> {
 
 	// Try as direct session token
 	if (isValidSession(body.token)) {
+		console.log(`[ui] Login success: Valid session token.`);
 		return new Response(JSON.stringify({ ok: true }), {
 			headers: {
 				"Content-Type": "application/json",
@@ -269,5 +273,6 @@ async function handleLoginPost(req: Request): Promise<Response> {
 		});
 	}
 
+	console.log(`[ui] Login failed: Token invalid or not found in memory (Total MagicLinks: ${getMagicLinkCount()})`);
 	return Response.json({ error: "Invalid or expired token" }, { status: 401 });
 }
