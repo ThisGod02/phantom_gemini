@@ -44,6 +44,10 @@ export async function callJudge<T>(options: {
 	const client = getClient();
 	const startTime = Date.now();
 
+	// Resolve the model name. Use PHANTOM_MODEL from env if it looks like a Gemini model,
+	// otherwise fall back to the provided model name (which might be a hardcoded constant).
+	const resolvedModel = process.env.PHANTOM_MODEL || options.model;
+
 	// Hint the JSON structure via system prompt since Gemini's responseSchema
 	// uses its own Schema format (not JSON Schema). The model is very reliable
 	// at following JSON instructions with responseMimeType set.
@@ -51,7 +55,7 @@ export async function callJudge<T>(options: {
 	const enhancedSystem = `${options.systemPrompt}\n\nRespond with a JSON object following this structure:\n${schemaHint}`;
 
 	const response = await client.generateContent(
-		options.model,
+		resolvedModel,
 		[{ role: "user", parts: [{ text: options.userMessage }] }],
 		enhancedSystem,
 		[] // no tools for judges
@@ -81,7 +85,7 @@ export async function callJudge<T>(options: {
 		confidence,
 		reasoning,
 		data: parsed,
-		model: options.model,
+		model: resolvedModel,
 		inputTokens,
 		outputTokens,
 		costUsd,
