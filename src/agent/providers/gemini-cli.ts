@@ -9,6 +9,11 @@ import type { LLMProvider, ProviderResponse } from "./types.ts";
 /**
  * GeminiCliProvider leverages the official @google/genai SDK to provide high-limit 
  * agentic sessions with Google Search grounding and OAuth support.
+ * 
+ * When no GOOGLE_API_KEY is set, it reads the cached OAuth token from
+ * ~/.gemini/oauth_creds.json (written by `bun run src/cli/main.ts login`) and
+ * passes it via httpOptions.headers, exactly the same way the official
+ * gemini-cli tool authenticates with the Generative Language API.
  */
 export class GeminiCliProvider implements LLMProvider {
 	private client: GoogleGenAI;
@@ -17,12 +22,10 @@ export class GeminiCliProvider implements LLMProvider {
 	constructor(apiKey?: string, options?: { enableSearch?: boolean }) {
 		this.options = options || {};
 		
-		let finalApiKey = apiKey || process.env.GOOGLE_API_KEY;
+		const finalApiKey = apiKey || process.env.GOOGLE_API_KEY;
 		let accessToken: string | undefined;
-		let projectId: string | undefined;
-		let location = "us-central1";
 
-		// If no API key, try to load OAuth token and Project from Gemini CLI config
+		// If no API key, try to load OAuth token from Gemini CLI config
 		if (!finalApiKey) {
 			try {
 				const os = require('os');
@@ -30,7 +33,6 @@ export class GeminiCliProvider implements LLMProvider {
 				const path = require('path');
 				const homedir = os.homedir();
 				const credsPath = path.join(homedir, '.gemini', 'oauth_creds.json');
-				const projectsPath = path.join(homedir, '.gemini', 'projects.json');
 				
 				if (fs.existsSync(credsPath)) {
 					const creds = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
@@ -38,48 +40,26 @@ export class GeminiCliProvider implements LLMProvider {
 						accessToken = creds.access_token;
 					}
 				}
-
-				if (fs.existsSync(projectsPath)) {
-					const projects = JSON.parse(fs.readFileSync(projectsPath, 'utf8'));
-					// Usually the first project or the one marked active
-					const current = projects.find((p: any) => p.active || p.current) || projects[0];
-					if (current && current.id) {
-						projectId = current.id;
-					}
-				}
 			} catch (e) {
 				// Silent fail
 			}
 		}
 
-		// Initialize client.
-		this.client = new GoogleGenAI({ 
-			// If we have an accessToken, we use Vertex AI mode to bypass AI Studio scope restrictions
-			vertexai: !!accessToken,
-			project: projectId,
-			location: location,
-			// API key and Project/Location are mutually exclusive in the SDK
-			apiKey: accessToken ? undefined : (finalApiKey || "AIzaSy" + "A".repeat(33)), 
-		});
-
 		if (accessToken) {
-			if (!finalApiKey) {
-				console.log(`[gemini-cli] OAuth session active (token detected)`);
-				if (projectId && !!accessToken) {
-					console.log(`[gemini-cli] Using Vertex AI mode (Project: ${projectId})`);
-				} else if (!!accessToken) {
-					console.warn(`[gemini-cli] WARNING: No Project ID found for Vertex AI mode. Requests might fail.`);
-				}
-			}
-			// Inject OAuth token into the hidden ApiClient
-			const apiClient = (this.client as any).apiClient;
-			if (apiClient && apiClient.clientOptions) {
-				apiClient.clientOptions.auth = {
-					addAuthHeaders: async (headers: Headers) => {
-						headers.set('Authorization', `Bearer ${accessToken}`);
+			console.log(`[gemini-cli] OAuth session active (token detected)`);
+			// This is exactly how the official gemini-cli tool passes its OAuth token:
+			// via httpOptions.headers — no apiKey, no vertexai mode needed.
+			this.client = new GoogleGenAI({
+				apiKey: undefined,
+				httpOptions: {
+					headers: {
+						'Authorization': `Bearer ${accessToken}`,
 					}
-				};
-			}
+				}
+			} as any);
+		} else {
+			// Standard API key mode
+			this.client = new GoogleGenAI({ apiKey: finalApiKey });
 		}
 	}
 
