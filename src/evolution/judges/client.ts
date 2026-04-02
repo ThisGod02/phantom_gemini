@@ -1,24 +1,24 @@
-import { GoogleGenAI } from "@google/genai";
 import { z } from "zod";
+import { createProvider, type LLMProvider } from "../../agent/providers/index.ts";
 import {
-	JUDGE_MAX_TOKENS,
-	JUDGE_TEMPERATURE,
 	type JudgeResult,
 	type MultiJudgeResult,
 	type VotingStrategy,
 } from "./types.ts";
 
-let _client: GoogleGenAI | null = null;
+let _client: LLMProvider | null = null;
 
-function getClient(): GoogleGenAI {
+function getClient(): LLMProvider {
 	if (!_client) {
-		_client = new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY });
+		const provider = process.env.PHANTOM_PROVIDER || "google";
+		const apiKey = provider === "openai" ? process.env.ROUTERAI_API_KEY : process.env.GOOGLE_API_KEY;
+		_client = createProvider(provider, apiKey, process.env.PHANTOM_BASE_URL);
 	}
 	return _client;
 }
 
 // Visible for testing — allows injecting a mock client
-export function setClient(client: GoogleGenAI | null): void {
+export function setClient(client: LLMProvider | null): void {
 	_client = client;
 }
 
@@ -48,16 +48,12 @@ export async function callJudge<T>(options: {
 	const schemaHint = buildSchemaHint(options.schema);
 	const enhancedSystem = `${options.systemPrompt}\n\nRespond with a JSON object following this structure:\n${schemaHint}`;
 
-	const response = await client.models.generateContent({
-		model: options.model,
-		contents: [{ role: "user", parts: [{ text: options.userMessage }] }],
-		config: {
-			systemInstruction: enhancedSystem,
-			temperature: JUDGE_TEMPERATURE,
-			maxOutputTokens: options.maxTokens ?? JUDGE_MAX_TOKENS,
-			responseMimeType: "application/json",
-		},
-	});
+	const response = await client.generateContent(
+		options.model,
+		[{ role: "user", parts: [{ text: options.userMessage }] }],
+		enhancedSystem,
+		[] // no tools for judges
+	);
 
 	const rawText = response.text ?? "";
 	let parsed: T;
@@ -71,7 +67,7 @@ export async function callJudge<T>(options: {
 
 	const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;
 	const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
-	const costUsd = estimateCost(options.model, inputTokens, outputTokens);
+	const costUsd = client.estimateCost(options.model, inputTokens, outputTokens);
 
 	const data = parsed as Record<string, unknown>;
 	const verdict = (data.verdict as "pass" | "fail") ?? "pass";
@@ -169,25 +165,3 @@ function buildSchemaHint(schema: z.ZodType): string {
 	return "{ ... } // Follow the judge schema";
 }
 
-/**
- * Estimate USD cost from token counts.
- * Gemini pricing as of April 2026.
- */
-function estimateCost(model: string, inputTokens: number, outputTokens: number): number {
-	let inputPer1M: number;
-	let outputPer1M: number;
-
-	if (model.includes("pro")) {
-		inputPer1M = 1.25;
-		outputPer1M = 10.0;
-	} else if (model.includes("lite")) {
-		inputPer1M = 0.075;
-		outputPer1M = 0.30;
-	} else {
-		// flash default
-		inputPer1M = 0.15;
-		outputPer1M = 0.60;
-	}
-
-	return (inputTokens / 1_000_000) * inputPer1M + (outputTokens / 1_000_000) * outputPer1M;
-}

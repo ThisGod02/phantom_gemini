@@ -13,6 +13,8 @@ export const PhantomConfigSchema = z.object({
 	public_url: z.string().url().optional(),
 	port: z.number().int().min(1).max(65535).default(3100),
 	role: z.string().min(1).default("swe"),
+	provider: z.enum(["google", "openai"]).default("google"),
+	base_url: z.string().url().optional(),
 	model: z.string().min(1).default("gemini-2.5-flash"),
 	effort: z.enum(["low", "medium", "high", "max"]).default("max"),
 	max_budget_usd: z.number().min(0).default(0),

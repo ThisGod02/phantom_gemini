@@ -132,7 +132,7 @@ describe("MCP scope enforcement", () => {
 				config: {
 					name: "scope-test",
 					port: 3100,
-					role: "swe",
+					role: "swe", provider: "google",
 					model: "claude-opus-4-6",
 					effort: "max" as const,
 					max_budget_usd: 0,

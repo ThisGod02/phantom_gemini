@@ -132,7 +132,7 @@ describe("SWE MCP Tools", () => {
 				config: {
 					name: "swe-test-phantom",
 					port: 3100,
-					role: "swe",
+					role: "swe", provider: "google",
 					model: "claude-opus-4-6",
 					effort: "max" as const,
 					max_budget_usd: 0,

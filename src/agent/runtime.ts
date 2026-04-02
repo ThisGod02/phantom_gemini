@@ -2,10 +2,9 @@ import type { Database } from "bun:sqlite";
 import {
 	type Content,
 	type FunctionDeclaration,
-	FunctionCallingConfigMode,
-	GoogleGenAI,
 	type Part,
 } from "@google/genai";
+import { createProvider, type LLMProvider } from "./providers/index.ts";
 import type { PhantomConfig } from "../config/types.ts";
 import type { EvolvedConfig } from "../evolution/types.ts";
 import type { MemoryContextBuilder } from "../memory/context-builder.ts";
@@ -43,7 +42,7 @@ export class AgentRuntime {
 	private config: PhantomConfig;
 	private sessionStore: SessionStore;
 	private costTracker: CostTracker;
-	private gemini: GoogleGenAI;
+	private llm: LLMProvider;
 	private activeSessions = new Set<string>();
 	private memoryContextBuilder: MemoryContextBuilder | null = null;
 	private evolvedConfig: EvolvedConfig | null = null;
@@ -57,7 +56,8 @@ export class AgentRuntime {
 		this.config = config;
 		this.sessionStore = new SessionStore(db);
 		this.costTracker = new CostTracker(db);
-		this.gemini = new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY });
+		const apiKey = config.provider === "openai" ? process.env.ROUTERAI_API_KEY : process.env.GOOGLE_API_KEY;
+		this.llm = createProvider(config.provider, apiKey, config.base_url);
 	}
 
 	setMemoryContextBuilder(builder: MemoryContextBuilder): void {
@@ -186,16 +186,12 @@ export class AgentRuntime {
 
 		try {
 			// ─── Ручной function calling loop ───────────────────────────────────────
-			let response = await this.gemini.models.generateContent({
-				model: this.config.model,
+			let response = await this.llm.generateContent(
+				this.config.model,
 				contents,
-				config: {
-					systemInstruction,
-					tools,
-					toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.AUTO } },
-					...(this.config.max_budget_usd > 0 ? { maxOutputTokens: 8192 } : {}),
-				},
-			});
+				systemInstruction,
+				tools
+			);
 
 			// Учитываем токены первого вызова
 			if (response.usageMetadata) {
@@ -214,7 +210,7 @@ export class AgentRuntime {
 				}
 
 				// Добавляем ответ модели в историю
-				const modelContent = response.candidates?.[0]?.content;
+				const modelContent = response.rawContentToAppend;
 				if (modelContent) contents.push(modelContent);
 
 				// Выполняем все tool calls параллельно (ProTip: Gemini может вернуть несколько сразу)
@@ -239,15 +235,12 @@ export class AgentRuntime {
 				contents.push({ role: "user", parts: functionResponses });
 
 				// Следующий шаг модели
-				response = await this.gemini.models.generateContent({
-					model: this.config.model,
+				response = await this.llm.generateContent(
+					this.config.model,
 					contents,
-					config: {
-						systemInstruction,
-						tools,
-						toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.AUTO } },
-					},
-				});
+					systemInstruction,
+					tools
+				);
 
 				if (response.usageMetadata) {
 					totalInputTokens += response.usageMetadata.promptTokenCount ?? 0;
@@ -264,7 +257,7 @@ export class AgentRuntime {
 				if (resultText) onEvent?.({ type: "assistant_message", content: resultText });
 
 				// Добавляем финальный ответ модели в историю
-				const finalContent = response.candidates?.[0]?.content;
+				const finalContent = response.rawContentToAppend;
 				if (finalContent) contents.push(finalContent);
 			}
 		} catch (err: unknown) {
@@ -281,7 +274,7 @@ export class AgentRuntime {
 		this.lastTrackedFiles = trackedFiles;
 
 		// Gemini не даёт точной стоимости в долларах напрямую — приближаем по токенам
-		const costUsd = estimateCost(this.config.model, totalInputTokens, totalOutputTokens);
+		const costUsd = this.llm.estimateCost(this.config.model, totalInputTokens, totalOutputTokens);
 		const cost: AgentCost = {
 			totalUsd: costUsd,
 			inputTokens: totalInputTokens,
@@ -354,26 +347,4 @@ export class AgentRuntime {
 
 		return { error: `Unknown tool: ${toolName}` };
 	}
-}
-
-/**
- * Приближённая стоимость в USD по количеству токенов.
- * Тарифы Gemini Flash (апрель 2026).
- */
-function estimateCost(model: string, inputTokens: number, outputTokens: number): number {
-	// gemini-2.5-flash: $0.15/1M input, $0.60/1M output (non-thinking)
-	// gemini-2.5-pro:   $1.25/1M input, $10/1M output
-	let inputPer1M: number;
-	let outputPer1M: number;
-
-	if (model.includes("pro")) {
-		inputPer1M = 1.25;
-		outputPer1M = 10.0;
-	} else {
-		// flash and flash-lite
-		inputPer1M = 0.15;
-		outputPer1M = 0.60;
-	}
-
-	return (inputTokens / 1_000_000) * inputPer1M + (outputTokens / 1_000_000) * outputPer1M;
 }

@@ -5,7 +5,7 @@ import { assemblePrompt } from "../prompt-assembler.ts";
 const baseConfig: PhantomConfig = {
 	name: "test-phantom",
 	port: 3100,
-	role: "swe",
+	role: "swe", provider: "google",
 	model: "claude-opus-4-6",
 	effort: "max",
 	max_budget_usd: 0,
