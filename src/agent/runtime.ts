@@ -97,6 +97,7 @@ export class AgentRuntime {
 		conversationId: string,
 		text: string,
 		onEvent?: (event: RuntimeEvent) => void,
+		metadata?: Record<string, any>,
 	): Promise<AgentResponse> {
 		const sessionKey = `${channelId}:${conversationId}`;
 		const startTime = Date.now();
@@ -111,11 +112,19 @@ export class AgentRuntime {
 		}
 
 		this.activeSessions.add(sessionKey);
-
 		const wrappedText = this.isExternalChannel(channelId) ? this.wrapWithSecurityContext(text) : text;
 
 		try {
-			return await this.runQuery(sessionKey, channelId, conversationId, wrappedText, startTime, onEvent);
+			const response = await this.runQuery(
+				sessionKey,
+				channelId,
+				conversationId,
+				wrappedText,
+				startTime,
+				onEvent,
+				metadata,
+			);
+			return response;
 		} finally {
 			this.activeSessions.delete(sessionKey);
 		}
@@ -136,6 +145,7 @@ export class AgentRuntime {
 		text: string,
 		startTime: number,
 		onEvent?: (event: RuntimeEvent) => void,
+		metadata?: Record<string, any>,
 	): Promise<AgentResponse> {
 		// Создаём или получаем сессию
 		let session = this.sessionStore.findActive(channelId, conversationId);
@@ -183,9 +193,37 @@ export class AgentRuntime {
 		);
 
 		// Добавляем новое сообщение пользователя
+		const userParts: Part[] = [{ text }];
+
+		// Если есть метаданные с путем к файлу и это картинка — добавляем её в промпт (Multimodal)
+		if (metadata?.localPath && typeof metadata.localPath === "string") {
+			const path = metadata.localPath;
+			const ext = path.split(".").pop()?.toLowerCase();
+			const imageExtensions = ["jpg", "jpeg", "png", "webp", "gif"];
+
+			if (ext && imageExtensions.includes(ext)) {
+				try {
+					const mimeType = metadata.mimeType ?? `image/${ext === "gif" ? "gif" : ext === "png" ? "png" : "jpeg"}`;
+					const data = await Bun.file(path).arrayBuffer();
+					const base64Data = Buffer.from(data).toString("base64");
+
+					userParts.push({
+						inlineData: {
+							mimeType,
+							data: base64Data,
+						},
+					});
+					console.log(`[runtime] Added multimodal image part: ${path} (${mimeType})`);
+				} catch (err: unknown) {
+					const msg = err instanceof Error ? err.message : String(err);
+					console.warn(`[runtime] Failed to attach image: ${msg}`);
+				}
+			}
+		}
+
 		const contents: Content[] = [
 			...history,
-			{ role: "user", parts: [{ text }] },
+			{ role: "user", parts: userParts },
 		];
 
 		// Собираем инструменты: нативные + in-process

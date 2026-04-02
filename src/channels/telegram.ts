@@ -4,14 +4,15 @@
  * MarkdownV2 formatting, and command handling.
  */
 
+import { resolve } from "node:path";
 import type { Channel, ChannelCapabilities, InboundMessage, OutboundMessage, SentMessage } from "./types.ts";
 
 type TelegrafBot = {
 	launch: () => Promise<void>;
 	stop: () => void;
-	command: (cmd: string, handler: (ctx: TelegrafContext) => Promise<void>) => void;
-	on: (event: string, handler: (ctx: TelegrafContext) => Promise<void>) => void;
-	action: (pattern: RegExp, handler: (ctx: TelegrafContext) => Promise<void>) => void;
+	command: (cmd: string, handler: (ctx: any) => Promise<void>) => void;
+	on: (event: string, handler: (ctx: any) => Promise<void>) => void;
+	action: (pattern: RegExp, handler: (ctx: any) => Promise<void>) => void;
 	telegram: TelegramApi;
 };
 
@@ -31,21 +32,6 @@ type TelegramApi = {
 	sendChatAction: (chatId: number | string, action: string) => Promise<void>;
 };
 
-type TelegrafContext = {
-	message?: {
-		text?: string;
-		from?: { id: number; first_name?: string; username?: string };
-		chat: { id: number };
-		message_id: number;
-	};
-	reply: (text: string, options?: Record<string, unknown>) => Promise<{ message_id: number }>;
-	telegram: TelegramApi;
-	chat?: { id: number };
-	from?: { id: number; first_name?: string; username?: string };
-	match?: RegExpMatchArray;
-	answerCbQuery?: (text?: string) => Promise<void>;
-	callbackQuery?: { data?: string; message?: { message_id: number; chat: { id: number } } };
-};
 
 export type TelegramChannelConfig = {
 	botToken: string;
@@ -248,6 +234,77 @@ export class TelegramChannel implements Channel {
 			}
 		});
 
+		this.bot.on("document", async (ctx) => {
+			if (!this.messageHandler || !ctx.message?.document) return;
+
+			const doc = ctx.message.document;
+			const fileId = doc.file_id;
+			const fileName = doc.file_name ?? `file_${fileId.slice(-8)}`;
+			const mimeType = doc.mime_type ?? "unknown";
+
+			try {
+				const localPath = await this.handleFileDownload(ctx, fileId, fileName);
+				const conversationId = `telegram:${ctx.message.chat.id}`;
+				const from = ctx.message.from;
+
+				const inbound: InboundMessage = {
+					id: String(ctx.message.message_id),
+					channelId: this.id,
+					conversationId,
+					senderId: String(from?.id ?? "unknown"),
+					senderName: from?.first_name ?? from?.username,
+					text: `[File uploaded: ${fileName} (${mimeType}). Saved to local path: ${localPath}]`,
+					timestamp: new Date(),
+					metadata: {
+						telegramChatId: ctx.message.chat.id,
+						telegramMessageId: ctx.message.message_id,
+						localPath,
+						fileName,
+						mimeType,
+					},
+				};
+				await this.messageHandler(inbound);
+			} catch (err: unknown) {
+				const msg = err instanceof Error ? err.message : String(err);
+				console.error(`[telegram] Error handling document: ${msg}`);
+			}
+		});
+
+		this.bot.on("photo", async (ctx) => {
+			if (!this.messageHandler || !ctx.message?.photo) return;
+
+			// Telegram sends photos in multiple sizes, take the largest one
+			const photo = ctx.message.photo[ctx.message.photo.length - 1];
+			const fileId = photo.file_id;
+			const fileName = `photo_${Date.now()}.jpg`;
+
+			try {
+				const localPath = await this.handleFileDownload(ctx, fileId, fileName);
+				const conversationId = `telegram:${ctx.message.chat.id}`;
+				const from = ctx.message.from;
+
+				const inbound: InboundMessage = {
+					id: String(ctx.message.message_id),
+					channelId: this.id,
+					conversationId,
+					senderId: String(from?.id ?? "unknown"),
+					senderName: from?.first_name ?? from?.username,
+					text: `[Photo uploaded. Saved to local path: ${localPath}]`,
+					timestamp: new Date(),
+					metadata: {
+						telegramChatId: ctx.message.chat.id,
+						telegramMessageId: ctx.message.message_id,
+						localPath,
+						fileName,
+					},
+				};
+				await this.messageHandler(inbound);
+			} catch (err: unknown) {
+				const msg = err instanceof Error ? err.message : String(err);
+				console.error(`[telegram] Error handling photo: ${msg}`);
+			}
+		});
+
 		// Handle inline keyboard button presses
 		this.bot.action(/^phantom:(.+)$/, async (ctx) => {
 			if (ctx.answerCbQuery) {
@@ -285,6 +342,21 @@ export class TelegramChannel implements Channel {
 				console.error(`[telegram] Error handling callback: ${msg}`);
 			}
 		});
+	}
+
+	private async handleFileDownload(ctx: any, fileId: string, fileName: string): Promise<string> {
+		const link = await ctx.telegram.getFileLink(fileId);
+		const downloadDir = resolve(process.cwd(), "data", "downloads");
+		const localPath = resolve(downloadDir, fileName);
+
+		const response = await fetch(link.href);
+		if (!response.ok) throw new Error(`Download failed: ${response.statusText}`);
+
+		const buffer = await response.arrayBuffer();
+		await Bun.write(localPath, buffer);
+
+		console.log(`[telegram] File downloaded: ${fileName} -> ${localPath}`);
+		return localPath;
 	}
 }
 

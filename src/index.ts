@@ -1,4 +1,4 @@
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { dynamicToolDeclarations, handleDynamicToolCall } from "./agent/in-process-tools.ts";
 import { AgentRuntime } from "./agent/runtime.ts";
@@ -88,6 +88,13 @@ async function main(): Promise<void> {
 	if (!existsSync(wmPath)) {
 		writeFileSync(wmPath, "# Working Memory\n\nYour personal notes. Update as you learn.\n", "utf-8");
 		console.log("[phantom] Seeded working memory file");
+	}
+
+	// Ensure downloads directory exists
+	const downloadDir = join(process.cwd(), "data", "downloads");
+	if (!existsSync(downloadDir)) {
+		mkdirSync(downloadDir, { recursive: true });
+		console.log("[phantom] Created downloads directory");
 	}
 
 	const memoryConfig = loadMemoryConfig();
@@ -472,7 +479,7 @@ async function main(): Promise<void> {
 					statusReactions?.setError();
 					break;
 			}
-		});
+		}, msg.metadata);
 
 		// Track assistant messages
 		if (response.text) {
