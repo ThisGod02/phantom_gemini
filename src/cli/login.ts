@@ -8,11 +8,20 @@ export async function runLogin(_args: string[]): Promise<void> {
 	console.log("\nStarting Google Account sign-in (OAuth Device Flow)...");
 	console.log("This will allow Phantom to use your account's high limits (Gemini Advanced/GCA).\n");
 
-	// Use cmd /c on Windows to bypass potential PowerShell execution policy issues
+	// Use bunx if running under bun, otherwise npx
+	const isBun = !!(process as any).versions?.bun;
+	const cmd = isBun ? "bunx" : "npx";
+	
 	const shell = process.platform === "win32" ? "cmd" : undefined;
-	const extraArgs = process.platform === "win32" ? ["/c", "npx", "@google/gemini-cli", "login"] : ["@google/gemini-cli", "login"];
+	let args: string[];
+	
+	if (process.platform === "win32") {
+		args = ["/c", cmd, "@google/gemini-cli", "login"];
+	} else {
+		args = [cmd, "@google/gemini-cli", "login"];
+	}
 
-	const child = spawn(shell || "npx", extraArgs, {
+	const child = spawn(shell || args[0], shell ? args : args.slice(1), {
 		stdio: "inherit",
 		shell: true,
 	});
