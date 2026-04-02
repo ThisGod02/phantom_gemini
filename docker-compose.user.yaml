@@ -21,6 +21,8 @@ services:
     build: .
     image: phantom-local:latest
     container_name: phantom
+    tty: true
+    stdin_open: true
     ports:
       - "${PORT:-3100}:3100"
     env_file:
