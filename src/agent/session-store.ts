@@ -60,7 +60,7 @@ export class SessionStore {
 	 * Обрезает до MAX_HISTORY_TURNS чтобы не разрастаться бесконечно.
 	 */
 	saveHistory(sessionKey: string, history: Content[]): void {
-		const MAX_HISTORY_TURNS = 200;
+		const MAX_HISTORY_TURNS = 20;
 		const trimmed = history.slice(-MAX_HISTORY_TURNS);
 		this.db.run(
 			`UPDATE sessions SET chat_history = ?, last_active_at = datetime('now') WHERE session_key = ?`,

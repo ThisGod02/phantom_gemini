@@ -61,6 +61,55 @@ export function assemblePrompt(
 	return sections.join("\n\n");
 }
 
+export type PromptAudit = {
+	identity: number;
+	environment: number;
+	security: number;
+	role: number;
+	evolved: number;
+	instructions: number;
+	workingMemory: number;
+	memoryContext: number;
+	total: number;
+};
+
+/**
+ * Returns a breakdown of estimated token usage for each section.
+ * Using a rough 4 chars/token estimate.
+ */
+export function auditPromptComponents(
+	config: PhantomConfig,
+	memoryContext?: string,
+	evolvedConfig?: EvolvedConfig,
+	roleTemplate?: RoleTemplate,
+	onboardingPrompt?: string,
+	dataDir?: string,
+): PromptAudit {
+	const estimate = (text: string) => Math.ceil(text.length / 4);
+
+	const identity = estimate(buildIdentity(config));
+	const environment = estimate(buildEnvironment(config));
+	const security = estimate(buildSecurity());
+	const role = roleTemplate ? estimate(roleTemplate.systemPromptSection) : estimate(buildFallbackRoleHint(config));
+	const evolved = evolvedConfig ? estimate(buildEvolvedSections(evolvedConfig)) : 0;
+	const instructions = estimate(buildInstructions());
+	const onboarding = onboardingPrompt ? estimate(onboardingPrompt) : 0;
+	const workingMemory = estimate(buildWorkingMemory(dataDir ?? join(process.cwd(), "data")));
+	const memoryContextTokens = memoryContext ? estimate(buildMemorySection(memoryContext)) : 0;
+
+	return {
+		identity,
+		environment,
+		security,
+		role,
+		evolved,
+		instructions,
+		workingMemory,
+		memoryContext: memoryContextTokens,
+		total: identity + environment + security + role + evolved + instructions + onboarding + workingMemory + memoryContextTokens,
+	};
+}
+
 function buildIdentity(config: PhantomConfig): string {
 	const publicUrl = config.public_url ?? null;
 	const urlLine = publicUrl ? `\n\nYour public endpoint is ${publicUrl}.` : "";

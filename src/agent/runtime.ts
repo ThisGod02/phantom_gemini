@@ -11,7 +11,7 @@ import type { MemoryContextBuilder } from "../memory/context-builder.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import { CostTracker } from "./cost-tracker.ts";
 import { type AgentCost, type AgentResponse, emptyCost } from "./events.ts";
-import { assemblePrompt } from "./prompt-assembler.ts";
+import { assemblePrompt, auditPromptComponents } from "./prompt-assembler.ts";
 import { SessionStore } from "./session-store.ts";
 import {
 	checkDangerousCommand,
@@ -149,6 +149,26 @@ export class AgentRuntime {
 			}
 		}
 
+		// Загружаем историю разговора из SQLite
+		const history = this.sessionStore.getHistory(sessionKey);
+
+		// Audit and log prompt components
+		const audit = auditPromptComponents(
+			this.config,
+			memoryContext,
+			this.evolvedConfig ?? undefined,
+			this.roleTemplate ?? undefined,
+			this.onboardingPrompt ?? undefined,
+			undefined,
+		);
+		const historyTokens = Math.ceil(JSON.stringify(history).length / 4);
+		console.log(
+			`[prompt] Audit (est. tokens): History: ${historyTokens}, ` +
+				`Memory: ${audit.memoryContext}, Evolved: ${audit.evolved}, ` +
+				`Role: ${audit.role}, System: ${audit.identity + audit.environment + audit.security + audit.instructions}, ` +
+				`Total: ${audit.total + historyTokens}`
+		);
+
 		const systemInstruction = assemblePrompt(
 			this.config,
 			memoryContext,
@@ -157,9 +177,6 @@ export class AgentRuntime {
 			this.onboardingPrompt ?? undefined,
 			undefined,
 		);
-
-		// Загружаем историю разговора из SQLite
-		const history = this.sessionStore.getHistory(sessionKey);
 
 		// Добавляем новое сообщение пользователя
 		const contents: Content[] = [
