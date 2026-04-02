@@ -107,11 +107,28 @@ export function loadChannelsConfig(path?: string): ChannelsConfig | null {
 	const parsed: unknown = parse(text);
 
 	const result = ChannelsConfigSchema.safeParse(parsed);
-	if (!result.success) {
+	let config: any = {};
+	if (result.success) {
+		config = result.data;
+	} else {
+		// Log but don't fail, we might have ENV overrides
 		const issues = result.error.issues.map((i) => `  - ${i.path.join(".")}: ${i.message}`).join("\n");
-		console.warn(`[config] Invalid channels config at ${configPath}:\n${issues}`);
-		return null;
+		console.warn(`[config] Invalid channels config at ${configPath}, relying on ENV overrides if available.\n${issues}`);
 	}
 
-	return result.data;
+	// OVERRIDE: If tokens are in environment, ensure they are enabled even if YAML is missing/broken
+	if (process.env.TELEGRAM_BOT_TOKEN) {
+		if (!config.telegram) config.telegram = { enabled: true, bot_token: "" };
+		config.telegram.enabled = true;
+		config.telegram.bot_token = process.env.TELEGRAM_BOT_TOKEN;
+	}
+
+	if (process.env.SLACK_BOT_TOKEN && process.env.SLACK_APP_TOKEN) {
+		if (!config.slack) config.slack = { enabled: true, bot_token: "", app_token: "" };
+		config.slack.enabled = true;
+		config.slack.bot_token = process.env.SLACK_BOT_TOKEN;
+		config.slack.app_token = process.env.SLACK_APP_TOKEN;
+	}
+
+	return config;
 }

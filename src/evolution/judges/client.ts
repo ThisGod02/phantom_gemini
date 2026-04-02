@@ -249,6 +249,10 @@ function normalizeJudgeResponse(data: any): any {
 		else if (lower.includes("fail")) normalized.session_outcome = "failure";
 	}
 
+	if (normalized.overall_reasoning && !normalized.reasoning) {
+		normalized.reasoning = normalized.overall_reasoning;
+	}
+
 	return normalized;
 }
 
