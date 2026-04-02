@@ -144,6 +144,7 @@ function clusterBySimilarity(items: string[]): string[][] {
 	const clusters: string[][] = [];
 
 	for (const item of items) {
+		if (!item || typeof item !== "string") continue;
 		const itemTokens = new Set(
 			item
 				.toLowerCase()

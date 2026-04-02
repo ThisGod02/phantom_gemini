@@ -149,22 +149,24 @@ export function buildCritiqueFromObservations(
 
 	// Corrections become user-profile changes
 	for (const correction of corrections) {
+		const safeContent = correction.content || "";
 		suggestedChanges.push({
 			file: "user-profile.md",
 			type: "append",
-			content: `- ${distillCorrection(correction.content)}`,
-			rationale: `User correction in session ${session.session_id}: "${correction.content.slice(0, 100)}"`,
+			content: `- ${distillCorrection(safeContent)}`,
+			rationale: `User correction in session ${session.session_id}: "${safeContent.slice(0, 100)}"`,
 			tier: "free",
 		});
 	}
 
 	// Preferences become user-profile changes
 	for (const preference of preferences) {
+		const safeContent = preference.content || "";
 		suggestedChanges.push({
 			file: "user-profile.md",
 			type: "append",
-			content: `- ${distillPreference(preference.content)}`,
-			rationale: `User preference in session ${session.session_id}: "${preference.content.slice(0, 100)}"`,
+			content: `- ${distillPreference(safeContent)}`,
+			rationale: `User preference in session ${session.session_id}: "${safeContent.slice(0, 100)}"`,
 			tier: "free",
 		});
 	}

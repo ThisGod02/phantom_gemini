@@ -264,6 +264,15 @@ function normalizeJudgeResponse(data: any): any {
 	if (normalized.overall_reasoning && !normalized.reasoning) {
 		normalized.reasoning = normalized.overall_reasoning;
 	}
+	if (normalized.rationale && !normalized.reasoning) {
+		normalized.reasoning = normalized.rationale;
+	}
+	if (normalized.reason && !normalized.reasoning) {
+		normalized.reasoning = normalized.reason;
+	}
+	if (normalized.analysis && !normalized.reasoning) {
+		normalized.reasoning = normalized.analysis;
+	}
 
 	return normalized;
 }
