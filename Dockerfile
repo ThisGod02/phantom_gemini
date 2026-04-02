@@ -25,11 +25,10 @@ WORKDIR /app
 
 # Install runtime dependencies:
 # - tini: PID 1 init for signal forwarding and zombie reaping
-# - curl: health checks and entrypoint API calls
-# - git: agent clones repositories
-# - jq: entrypoint parses Ollama API responses
-# - sqlite3: database inspection and backup
-# - ca-certificates: TLS connections
+# - curl, ca-certificates: networking
+# - git, gh: repository management
+# - jq, sqlite3: data manipulation
+# - iproute2, procps: network/process inspection (netstat, pkill)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       tini \
@@ -37,7 +36,18 @@ RUN apt-get update && \
       git \
       jq \
       sqlite3 \
-      ca-certificates && \
+      ca-certificates \
+      iproute2 \
+      procps \
+      vim \
+      nano && \
+    # Install GitHub CLI (gh)
+    mkdir -p -m 755 /etc/apt/keyrings && \
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null && \
+    chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends gh && \
     rm -rf /var/lib/apt/lists/*
 
 # NOTE: The Agent SDK spawns its bundled cli.js via bun, NOT the global `claude`
