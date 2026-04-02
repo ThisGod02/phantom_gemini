@@ -64,7 +64,8 @@ function isPathSafe(urlPath: string): string | null {
 }
 
 function buildSetCookieHeader(sessionToken: string): string {
-	return `${COOKIE_NAME}=${sessionToken}; Path=/ui; HttpOnly; Secure; SameSite=Strict; Max-Age=${COOKIE_MAX_AGE}`;
+	// Relaxing security for HTTP/IP access. 'Secure' blocks cookies on non-HTTPS origins.
+	return `${COOKIE_NAME}=${sessionToken}; Path=/ui; HttpOnly; SameSite=Lax; Max-Age=${COOKIE_MAX_AGE}`;
 }
 
 export async function handleUiRequest(req: Request): Promise<Response> {
