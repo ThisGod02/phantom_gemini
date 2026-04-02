@@ -5,3 +5,7 @@ slack:
   # default_channel_id: C04ABC123
   # default_user_id: U04ABC123
   owner_user_id: ${OWNER_SLACK_USER_ID}
+
+telegram:
+  enabled: true
+  bot_token: ${TELEGRAM_BOT_TOKEN}
