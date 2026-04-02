@@ -87,6 +87,7 @@ export class EvolutionEngine {
 		let observations: import("./types.ts").SessionObservation[];
 		if (this.llmJudgesEnabled && !this.isDailyCostCapReached()) {
 			const currentConfig = this.getConfig();
+			// We pass the session as-is, but the transcript is already pruned in index.ts
 			const result = await extractObservationsWithLLM(session, currentConfig);
 			observations = result.observations;
 			if (result.judgeCost) {
