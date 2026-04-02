@@ -52,7 +52,7 @@ export async function callJudge<T>(options: {
 	// uses its own Schema format (not JSON Schema). The model is very reliable
 	// at following JSON instructions with responseMimeType set.
 	const schemaHint = buildSchemaHint(options.schema);
-	const enhancedSystem = `${options.systemPrompt}\n\nRespond with a JSON object following this structure:\n${schemaHint}`;
+	const enhancedSystem = `${options.systemPrompt}\n\nCRITICAL: You MUST respond with a single, valid JSON object that exactly matches the structure below. Do not include any text before or after the JSON. ALL fields are required.\n\nJSON STRUCTURE:\n${schemaHint}`;
 
 	const response = await client.generateContent(
 		resolvedModel,
@@ -155,19 +155,44 @@ export async function multiJudge<T>(
  */
 function buildSchemaHint(schema: z.ZodType): string {
 	try {
-		// Используем zod _def чтобы получить описание полей
-		const def = (schema as unknown as { _def: { shape?: () => Record<string, { description?: string }> } })._def;
-		if (def?.shape) {
+		// Use zod-to-json-schema like logic to build a helpful template
+		const def = (schema as any)._def;
+
+		if (def?.typeName === "ZodObject") {
 			const shape = def.shape();
-			const fields = Object.entries(shape).map(([key, field]) => {
-				const desc = (field as { description?: string }).description ?? "";
-				return `  "${key}": ... // ${desc}`;
+			const entries = Object.entries(shape).map(([key, value]: [string, any]) => {
+				const description = value.description || "";
+				let typeStr = "any";
+				let example = "...";
+
+				const fieldDef = value._def;
+				if (fieldDef.typeName === "ZodString") {
+					typeStr = "string";
+					example = "\"text\"";
+				} else if (fieldDef.typeName === "ZodNumber") {
+					typeStr = "number";
+					example = "0.5";
+				} else if (fieldDef.typeName === "ZodBoolean") {
+					typeStr = "boolean";
+					example = "true";
+				} else if (fieldDef.typeName === "ZodEnum") {
+					typeStr = fieldDef.values.join(" | ");
+					example = `"${fieldDef.values[0]}"`;
+				} else if (fieldDef.typeName === "ZodArray") {
+					typeStr = "array";
+					example = "[]";
+				} else if (fieldDef.typeName === "ZodObject") {
+					typeStr = "object";
+					example = "{}";
+				}
+
+				return `  "${key}": ${example} // Type: ${typeStr}${description ? ". Description: " + description : ""}`;
 			});
-			return `{\n${fields.join(",\n")}\n}`;
+			return `{\n${entries.join(",\n")}\n}`;
 		}
-	} catch {
+	} catch (err) {
 		// Fallback
 	}
-	return "{ ... } // Follow the judge schema";
+	return "{ ... } // Follow the required schema exactly";
 }
 

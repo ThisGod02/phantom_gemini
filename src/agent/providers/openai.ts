@@ -110,6 +110,7 @@ export class OpenAIProvider implements LLMProvider {
 			messages,
 			tools: openaiTools.length > 0 ? openaiTools : undefined,
 			tool_choice: openaiTools.length > 0 ? "auto" : undefined,
+			response_format: { type: "json_object" },
 		});
 
 		const choice = response.choices[0];
