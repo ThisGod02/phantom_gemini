@@ -97,7 +97,7 @@ export class OpenAIProvider implements LLMProvider {
 							function: {
 								name: decl.name,
 								description: decl.description,
-								parameters: decl.parameters as Record<string, unknown>,
+								parameters: this.sanitizeSchema(decl.parameters) as Record<string, unknown>,
 							},
 						});
 					}
@@ -171,5 +171,54 @@ export class OpenAIProvider implements LLMProvider {
 		}
 
 		return (inputTokens / 1_000_000) * inputPer1M + (outputTokens / 1_000_000) * outputPer1M;
+	}
+
+	private sanitizeSchema(schema: any): any {
+		if (!schema || typeof schema !== "object") return schema;
+
+		const result = { ...schema };
+
+		// Ensure properties implies type: object (Gemini Requirement)
+		if (result.properties && !result.type) {
+			result.type = "object";
+		}
+
+		// Convert enum types (if numeric) or ensure string literals
+		if (result.type) {
+			const typeMap: Record<string | number, string> = {
+				0: "string",
+				1: "number",
+				2: "integer",
+				3: "boolean",
+				4: "array",
+				5: "object",
+				STRING: "string",
+				NUMBER: "number",
+				INTEGER: "integer",
+				BOOLEAN: "boolean",
+				ARRAY: "array",
+				OBJECT: "object",
+			};
+			if (typeMap[result.type]) {
+				result.type = typeMap[result.type];
+			} else {
+				result.type = String(result.type).toLowerCase();
+			}
+		}
+
+		// Recursively sanitize nested structures
+		if (result.properties) {
+			const newProps: Record<string, any> = {};
+			for (const [key, prop] of Object.entries(result.properties)) {
+				newProps[key] = this.sanitizeSchema(prop);
+			}
+			result.properties = newProps;
+		}
+
+		if (result.items) {
+			result.items = this.sanitizeSchema(result.items);
+		}
+
+		return result;
 	}
 }

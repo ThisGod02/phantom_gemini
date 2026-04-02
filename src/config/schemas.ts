@@ -15,7 +15,7 @@ export const PhantomConfigSchema = z.object({
 	role: z.string().min(1).default("swe"),
 	provider: z.enum(["google", "openai"]).default("google"),
 	base_url: z.string().url().optional(),
-	model: z.string().min(1).default("gemini-2.5-flash"),
+	model: z.string().min(1).default("gemini-2.0-flash-exp"),
 	effort: z.enum(["low", "medium", "high", "max"]).default("max"),
 	max_budget_usd: z.number().min(0).default(0),
 	timeout_minutes: z.number().min(1).default(240),

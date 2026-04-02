@@ -1,6 +1,6 @@
-export const JUDGE_MODEL_FLASH = "gemini-2.5-flash";
-export const JUDGE_MODEL_FLASH_LITE = "gemini-2.0-flash-lite";
-export const JUDGE_MODEL_PRO = "gemini-2.5-pro";
+export const JUDGE_MODEL_FLASH = "gemini-1.5-flash";
+export const JUDGE_MODEL_FLASH_LITE = "gemini-1.5-flash";
+export const JUDGE_MODEL_PRO = "gemini-1.5-pro";
 
 // Aliases for backward compatibility with evolution engine callers
 export const JUDGE_MODEL_SONNET = JUDGE_MODEL_FLASH;
