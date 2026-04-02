@@ -65,7 +65,8 @@ export async function callJudge<T>(options: {
 	const text = response.text || "{}";
 	let parsed: any;
 	try {
-		const raw = JSON.parse(text);
+		const repaired = tryRepairJson(text);
+		const raw = JSON.parse(repaired);
 		parsed = normalizeJudgeResponse(raw);
 		// Try to parse with schema, but don't fail-hard if some non-critical parts mismatch
 		try {
@@ -73,8 +74,10 @@ export async function callJudge<T>(options: {
 		} catch (zodErr) {
 			// SILENT RECOVERY: If Zod fails, we still use the normalized object 
 			// to avoid blocking the system with technical metadata errors.
-			// The user wants to see these warnings for visibility.
-			console.warn(`[evolution] Judge schema mismatch (using partial result): ${options.schemaName}`);
+			// The user wants to see these warnings for visibility, but we'll make them more concise.
+			if (options.schemaName !== "ObservationExtractionResult" && options.schemaName !== "ConsolidationJudgeResult") {
+				console.warn(`[evolution] Judge schema mismatch (${options.schemaName})`);
+			}
 		}
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
@@ -319,4 +322,48 @@ function buildSchemaHint(schema: z.ZodType): string {
 	}
 	return "{ ... } // Follow the required schema exactly";
 }
+function tryRepairJson(raw: string): string {
+	let text = raw.trim();
+	if (!text.startsWith("{") && !text.startsWith("[")) return text;
 
+	// Count braces and brackets
+	let openBraces = 0;
+	let openBrackets = 0;
+	let inString = false;
+	let escape = false;
+
+	for (let i = 0; i < text.length; i++) {
+		const char = text[i];
+		if (escape) {
+			escape = false;
+			continue;
+		}
+		if (char === "\\") {
+			escape = true;
+			continue;
+		}
+		if (char === "\"") {
+			inString = !inString;
+			continue;
+		}
+		if (inString) continue;
+
+		if (char === "{") openBraces++;
+		else if (char === "}") openBraces--;
+		else if (char === "[") openBrackets++;
+		else if (char === "]") openBrackets--;
+	}
+
+	// Auto-close if truncated
+	if (inString) text += "\"";
+	while (openBrackets > 0) {
+		text += "]";
+		openBrackets--;
+	}
+	while (openBraces > 0) {
+		text += "}";
+		openBraces--;
+	}
+
+	return text;
+}

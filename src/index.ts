@@ -364,10 +364,21 @@ async function main(): Promise<void> {
 		const existing = conversationMessages.get(convKey) ?? { user: [], assistant: [] };
 		existing.user.push(msg.text);
 		
-		// Pruning: Keep only the most recent 15 messages for each role
-		// to prevent context bloat (94k+ tokens) and 40s+ latency.
-		if (existing.user.length > 15) existing.user = existing.user.slice(-15);
-		if (existing.assistant.length > 15) existing.assistant = existing.assistant.slice(-15);
+		// Pruning: Keep a strict character-based budget for the conversation history
+		// to prevent context bloat (120k+ tokens) and high latency.
+		// Target: ~20,000 characters total across both roles (approx 5-8k tokens).
+		const CHAR_BUDGET = 20000;
+		let currentChars = existing.user.join("").length + existing.assistant.join("").length;
+		
+		while (currentChars > CHAR_BUDGET && (existing.user.length > 1 || existing.assistant.length > 0)) {
+			// Remove oldest from either role to fit budget
+			if (existing.user.length > existing.assistant.length) {
+				existing.user.shift();
+			} else {
+				existing.assistant.shift();
+			}
+			currentChars = existing.user.join("").length + existing.assistant.join("").length;
+		}
 		
 		conversationMessages.set(convKey, existing);
 
@@ -448,8 +459,17 @@ async function main(): Promise<void> {
 		// Track assistant messages
 		if (response.text) {
 			existing.assistant.push(response.text);
-			if (existing.assistant.length > 15) {
-				existing.assistant = existing.assistant.slice(-15);
+			
+			// Maintain character budget on every turn
+			const CHAR_BUDGET = 20000;
+			let currentChars = existing.user.join("").length + existing.assistant.join("").length;
+			while (currentChars > CHAR_BUDGET && (existing.assistant.length > 1 || existing.user.length > 0)) {
+				if (existing.assistant.length > existing.user.length) {
+					existing.assistant.shift();
+				} else {
+					existing.user.shift();
+				}
+				currentChars = existing.user.join("").length + existing.assistant.join("").length;
 			}
 		}
 
