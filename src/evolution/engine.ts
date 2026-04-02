@@ -48,6 +48,9 @@ export class EvolutionEngine {
 		const setting = this.config.judges?.enabled ?? "auto";
 		if (setting === "never") return false;
 		if (setting === "always") return true;
+		
+		const provider = process.env.PHANTOM_PROVIDER || "google";
+		if (provider === "openai") return !!process.env.ROUTERAI_API_KEY;
 		return !!process.env.GOOGLE_API_KEY;
 	}
 
