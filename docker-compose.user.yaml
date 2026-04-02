@@ -44,7 +44,7 @@ services:
       - 8.8.8.8
     volumes:
       # Persistent state - survives restarts and redeployments
-      - phantom_config:/app/config
+      - ./config:/app/config
       - phantom_evolved:/app/phantom-config
       - phantom_data:/app/data
       - phantom_public:/app/public
@@ -110,9 +110,8 @@ services:
 # Named volumes persist across container restarts and redeployments.
 # "docker compose down" keeps them. "docker compose down -v" destroys them.
 volumes:
-  phantom_config:
   phantom_evolved:
-  phantom_data:
+  phantom_data:  
   phantom_public:
   phantom_repos:
   qdrant_data:
