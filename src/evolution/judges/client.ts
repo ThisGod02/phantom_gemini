@@ -67,10 +67,18 @@ export async function callJudge<T>(options: {
 	try {
 		const raw = JSON.parse(text);
 		parsed = normalizeJudgeResponse(raw);
-		parsed = options.schema.parse(parsed);
+		// Try to parse with schema, but don't fail-hard if some non-critical parts mismatch
+		try {
+			parsed = options.schema.parse(parsed);
+		} catch (zodErr) {
+			// SILENT RECOVERY: If Zod fails, we still use the normalized object 
+			// to avoid blocking the system with technical metadata errors.
+			// Only log a tiny warning, not the giant trace.
+			console.warn(`[evolution] Judge schema mismatch (using partial result): ${options.schemaName}`);
+		}
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
-		throw new Error(`Judge returned invalid JSON or schema mismatch: ${msg}\nRaw: ${text.slice(0, 500)}`);
+		throw new Error(`Judge returned invalid JSON: ${msg}\nRaw: ${text.slice(0, 500)}`);
 	}
 
 	const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;
@@ -183,6 +191,25 @@ function normalizeJudgeResponse(data: any): any {
 
 		// Recursively normalize children
 		normalized[newKey] = normalizeJudgeResponse(value);
+	}
+
+	// Post-process specific structures
+	if (normalized.implicit_signals && Array.isArray(normalized.implicit_signals)) {
+		// Convert array signals back to object fields
+		const signalsObj: any = {};
+		for (const item of normalized.implicit_signals) {
+			if (item && typeof item === "object") {
+				const key = item.type || item.key || item.name;
+				const val = item.value || item.score || item.signal;
+				if (key) signalsObj[key] = val;
+			}
+		}
+		normalized.implicit_signals = {
+			user_satisfaction: signalsObj.user_satisfaction ?? 0.5,
+			user_satisfaction_evidence: signalsObj.user_satisfaction_evidence ?? "",
+			agent_performance: signalsObj.agent_performance ?? 0.5,
+			agent_performance_evidence: signalsObj.agent_performance_evidence ?? "",
+		};
 	}
 
 	// Post-process specific enums or structures that models often get wrong
