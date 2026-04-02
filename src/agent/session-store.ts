@@ -71,7 +71,7 @@ export class SessionStore {
 		if (!session?.chat_history) return [];
 		try {
 			const history = JSON.parse(session.chat_history) as Content[];
-			const HISTORY_CHAR_BUDGET = 60000; // ~15,000 tokens
+			const HISTORY_CHAR_BUDGET = 40000; // ~10,000 tokens
 			const MAX_CHAR_PER_MSG = 5000;
 			
 			let currentBudget = HISTORY_CHAR_BUDGET;
@@ -82,19 +82,43 @@ export class SessionStore {
 				const msg = history[i];
 				if (!msg.parts) continue;
 
+				// AGGRESSIVE MULTIMODAL PURGE:
+				// We keep image data ONLY for the last 2 messages from the user.
+				// Older images are stripped to save tokens while keeping the text context.
+				const isRecent = i >= history.length - 2;
+
 				const processedParts = msg.parts.map(part => {
+					// Handle text parts
 					if (part.text && part.text.length > MAX_CHAR_PER_MSG) {
 						return { text: part.text.slice(0, MAX_CHAR_PER_MSG) + "\n\n[... message truncated in history ...]" };
+					}
+					// Handle multimodal parts (inlineData)
+					if (part.inlineData) {
+						if (isRecent) {
+							return part; // Keep recent images
+						} else {
+							// Return a placeholder for old images to keep the context that an image was there
+							return { text: `[Image data purged from history to save tokens. Filename: ${msg.role === "user" ? "user_upload" : "agent_vision"}]` };
+						}
 					}
 					return part;
 				});
 
-				const msgLen = processedParts.reduce((sum, p) => sum + (p.text?.length ?? 0), 0);
+				// Calculate total message length (text + base64 data)
+				const msgLen = processedParts.reduce((sum, p) => {
+					const textLen = p.text?.length ?? 0;
+					const dataLen = p.inlineData?.data?.length ?? 0;
+					return sum + textLen + dataLen;
+				}, 0);
 				
 				if (currentBudget - msgLen > 0 || result.length < 2) { // Always keep at least 2 messages
 					result.unshift({ ...msg, parts: processedParts });
 					currentBudget -= msgLen;
 				} else {
+					// If a single message is too huge (e.g. fresh image), we still keep it but it might eat the whole budget
+					if (result.length === 0) {
+						result.unshift({ ...msg, parts: processedParts });
+					}
 					break;
 				}
 			}
@@ -109,8 +133,25 @@ export class SessionStore {
 	 * Обрезает до разумного предела чтобы база не пухла.
 	 */
 	saveHistory(sessionKey: string, history: Content[]): void {
-		const MAX_HISTORY_TURNS = 100; // Max turns to store on disk
-		const trimmed = history.slice(-MAX_HISTORY_TURNS);
+		const MAX_HISTORY_TURNS = 50; // Max turns to store on disk
+		const MULTIMODAL_DISK_RETENTION = 4; // Keep images only for last 4 turns on disk
+
+		const trimmed = history.slice(-MAX_HISTORY_TURNS).map((msg, idx, arr) => {
+			const isRecent = idx >= arr.length - MULTIMODAL_DISK_RETENTION;
+			if (isRecent) return msg;
+
+			// Strip heavy image data from older messages before saving to disk
+			return {
+				...msg,
+				parts: (msg.parts || []).map(p => {
+					if (p.inlineData) {
+						return { text: `[Image data stripped from long-term storage to save space. Filename: ${msg.role === "user" ? "user_upload" : "agent_vision"}]` };
+					}
+					return p;
+				})
+			};
+		});
+
 		this.db.run(
 			`UPDATE sessions SET chat_history = ?, last_active_at = datetime('now') WHERE session_key = ?`,
 			[JSON.stringify(trimmed), sessionKey],
