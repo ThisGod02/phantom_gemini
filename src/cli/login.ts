@@ -8,20 +8,23 @@ export async function runLogin(_args: string[]): Promise<void> {
 	console.log("\nStarting Google Account sign-in (OAuth Device Flow)...");
 	console.log("This will allow Phantom to use your account's high limits (Gemini Advanced/GCA).\n");
 
-	// Use bunx if running under bun, otherwise npx
-	const isBun = !!(process as any).versions?.bun;
-	const cmd = isBun ? "bunx" : "npx";
+	// Use current runtime (bun/node) to run the CLI directly from node_modules if possible.
+	// This avoids issues where npx/bunx might delegate to an old system Node version.
+	const localBundle = "node_modules/@google/gemini-cli/bundle/gemini.js";
+	const exe = process.argv[0]; // 'bun' or 'node'
 	
 	const shell = process.platform === "win32" ? "cmd" : undefined;
 	let args: string[];
 	
 	if (process.platform === "win32") {
-		args = ["/c", cmd, "@google/gemini-cli", "login"];
+		// On Windows, running with cmd /c
+		args = ["/c", exe, localBundle, "login"];
 	} else {
-		args = [cmd, "@google/gemini-cli", "login"];
+		// On Linux, run directly
+		args = [localBundle, "login"];
 	}
 
-	const child = spawn(shell || args[0], shell ? args : args.slice(1), {
+	const child = spawn(shell || exe, args, {
 		stdio: "inherit",
 		shell: true,
 	});
