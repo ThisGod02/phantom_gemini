@@ -19,16 +19,17 @@ export const ObservationType = z.enum([
 ]);
 
 export const Observation = z.object({
-	type: ObservationType,
-	summary: z.string().describe("One sentence describing the observation."),
-	detail: z.string().describe("Full context including what happened before and after."),
-	evidence: z.string().describe("Direct quote from the session supporting this observation."),
+	type: ObservationType.default("workflow_pattern"),
+	summary: z.string().describe("One sentence describing the observation.").default(""),
+	detail: z.string().describe("Full context including what happened before and after.").default(""),
+	evidence: z.string().describe("Direct quote from the session supporting this observation.").default(""),
 	importance: z
 		.number()
 		.min(0)
 		.max(1)
-		.describe("How important is this for future sessions? 0.1 = trivial, 0.5 = moderate, 0.9 = critical."),
-	importance_reasoning: z.string().describe("Why this level of importance?"),
+		.describe("How important is this for future sessions? 0.1 = trivial, 0.5 = moderate, 0.9 = critical.")
+		.default(0.5),
+	importance_reasoning: z.string().describe("Why this level of importance?").default(""),
 	affected_config_files: z
 		.array(z.string())
 		.describe(
@@ -40,29 +41,31 @@ export const Observation = z.object({
 });
 
 export const ObservationExtractionResult = z.object({
-	session_summary: z.string().describe("2-3 sentence summary of the overall session."),
-	session_outcome: z.enum(["success", "partial_success", "failure", "abandoned"]),
-	observations: z.array(Observation),
+	session_summary: z.string().describe("2-3 sentence summary of the overall session.").default(""),
+	session_outcome: z.enum(["success", "partial_success", "failure", "abandoned"]).default("success"),
+	observations: z.array(Observation).default([]),
 	implicit_signals: z.object({
 		user_satisfaction: z
 			.number()
 			.min(0)
 			.max(1)
-			.describe("Estimated user satisfaction. 0 = frustrated, 0.5 = neutral, 1 = delighted."),
-		user_satisfaction_evidence: z.string(),
+			.describe("Estimated user satisfaction. 0 = frustrated, 0.5 = neutral, 1 = delighted.")
+			.default(0.5),
+		user_satisfaction_evidence: z.string().default(""),
 		agent_performance: z
 			.number()
 			.min(0)
 			.max(1)
-			.describe("How well did the agent perform? 0 = terrible, 0.5 = adequate, 1 = excellent."),
-		agent_performance_evidence: z.string(),
-	}),
+			.describe("How well did the agent perform? 0 = terrible, 0.5 = adequate, 1 = excellent.")
+			.default(0.5),
+		agent_performance_evidence: z.string().default(""),
+	}).default({}),
 	meta: z.object({
-		total_user_messages: z.number(),
-		total_corrections: z.number(),
-		tools_used: z.array(z.string()),
-		primary_task_type: z.string(),
-	}),
+		total_user_messages: z.number().default(0),
+		total_corrections: z.number().default(0),
+		tools_used: z.array(z.string()).default([]),
+		primary_task_type: z.string().default("unknown"),
+	}).default({}),
 });
 
 export type ObservationExtractionResultType = z.infer<typeof ObservationExtractionResult>;
@@ -162,33 +165,34 @@ export const ExtractedFact = z.object({
 });
 
 export const DetectedProcedure = z.object({
-	name: z.string().describe("Short name for the procedure."),
-	description: z.string().describe("What this procedure accomplishes."),
-	trigger: z.string().describe("When should this procedure be used?"),
-	steps: z.array(z.string()).describe("Ordered list of steps."),
-	confidence: z.number().min(0).max(1),
-	evidence: z.string(),
+	name: z.string().describe("Short name for the procedure.").default("unknown"),
+	description: z.string().describe("What this procedure accomplishes.").default(""),
+	trigger: z.string().describe("When should this procedure be used?").default(""),
+	steps: z.array(z.string()).describe("Ordered list of steps.").default([]),
+	confidence: z.number().min(0).max(1).default(0.5),
+	evidence: z.string().default(""),
 });
 
 export const ConsolidationJudgeResult = z.object({
-	reasoning: z.string().describe("Walk through the session identifying key moments for memory extraction."),
-	extracted_facts: z.array(ExtractedFact),
-	detected_procedures: z.array(DetectedProcedure),
+	reasoning: z.string().describe("Walk through the session identifying key moments for memory extraction.").default(""),
+	extracted_facts: z.array(ExtractedFact).default([]),
+	detected_procedures: z.array(DetectedProcedure).default([]),
 	episode_importance: z
 		.number()
 		.min(0)
 		.max(1)
-		.describe("Overall importance for long-term memory. 0.1 = routine. 0.5 = useful. 0.9 = critical."),
-	episode_importance_reasoning: z.string(),
+		.describe("Overall importance for long-term memory. 0.1 = routine. 0.5 = useful. 0.9 = critical.")
+		.default(0.5),
+	episode_importance_reasoning: z.string().default(""),
 	contradiction_alerts: z.array(
 		z.object({
-			new_fact: z.string(),
-			existing_fact: z.string(),
-			resolution: z.enum(["new_supersedes", "existing_preserved", "needs_human_review"]),
-			reasoning: z.string(),
+			new_fact: z.string().default(""),
+			existing_fact: z.string().default(""),
+			resolution: z.enum(["new_supersedes", "existing_preserved", "needs_human_review"]).default("needs_human_review"),
+			reasoning: z.string().default(""),
 		}),
-	),
-	key_takeaways: z.array(z.string()).describe("3-5 bullet points summarizing what was learned."),
+	).default([]),
+	key_takeaways: z.array(z.string()).describe("3-5 bullet points summarizing what was learned.").default([]),
 });
 
 export type ConsolidationJudgeResultType = z.infer<typeof ConsolidationJudgeResult>;

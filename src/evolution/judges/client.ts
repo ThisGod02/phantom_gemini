@@ -170,6 +170,7 @@ function normalizeJudgeResponse(data: any): any {
 		const keyMap: Record<string, string> = {
 			"fact": "natural_language",
 			"content": "detail",
+			"description": "detail",
 			"observation": "summary",
 			"importance_level": "importance",
 			"reason": "reasoning",
@@ -187,13 +188,32 @@ function normalizeJudgeResponse(data: any): any {
 	// Post-process specific enums or structures that models often get wrong
 	if (normalized.category && typeof normalized.category === "string") {
 		const catMap: Record<string, string> = {
-			"process knowledge": "process",
-			"tool insights": "tool",
-			"user preference": "user_preference",
-			"domain knowledge": "domain_knowledge",
+			"process": "process",
+			"tool": "tool",
+			"user_preference": "user_preference",
+			"domain_knowledge": "domain_knowledge",
+			"codebase": "codebase",
+			"team": "team"
 		};
 		const lower = normalized.category.toLowerCase();
-		if (catMap[lower]) normalized.category = catMap[lower];
+		// Fuzzy match categories
+		for (const [key, val] of Object.entries(catMap)) {
+			if (lower.includes(key)) normalized.category = val;
+		}
+	}
+
+	if (normalized.type && typeof normalized.type === "string") {
+		const lower = normalized.type.toLowerCase();
+		// Fuzzy search for types (e.g. "language_preference" -> "preference_stated")
+		if (lower.includes("correction")) normalized.type = lower.includes("explicit") ? "explicit_correction" : "implicit_correction";
+		else if (lower.includes("preference")) normalized.type = lower.includes("stated") ? "preference_stated" : "preference_inferred";
+		else if (lower.includes("error")) normalized.type = lower.includes("recover") ? "error_recovered" : "error_occurred";
+		else if (lower.includes("success") || lower.includes("succeed")) normalized.type = "task_succeeded";
+		else if (lower.includes("fail")) normalized.type = "task_failed";
+		else if (lower.includes("sentiment") || lower.includes("satisfaction") || lower.includes("frustration") || lower.includes("delighted")) normalized.type = "user_sentiment_signal";
+		else if (normalized.type === "language_preference" || normalized.type === "behavioral" || normalized.type === "proactive_initiation") {
+			normalized.type = "workflow_pattern"; // Fallback for things that are just observations
+		}
 	}
 
 	if (normalized.session_outcome && typeof normalized.session_outcome === "string") {
