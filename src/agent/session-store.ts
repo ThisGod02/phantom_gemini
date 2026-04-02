@@ -23,6 +23,27 @@ export class SessionStore {
 
 	constructor(db: Database) {
 		this.db = db;
+		this.init();
+	}
+
+	private init(): void {
+		// Existing sessions table (already exists but for safety)
+		this.db.run(`
+			CREATE TABLE IF NOT EXISTS web_sessions (
+				token TEXT PRIMARY KEY,
+				created_at INTEGER NOT NULL,
+				expires_at INTEGER NOT NULL
+			)
+		`);
+
+		this.db.run(`
+			CREATE TABLE IF NOT EXISTS magic_links (
+				token TEXT PRIMARY KEY,
+				session_token TEXT NOT NULL,
+				expires_at INTEGER NOT NULL,
+				used INTEGER DEFAULT 0
+			)
+		`);
 	}
 
 	create(channelId: string, conversationId: string): Session {
@@ -140,5 +161,55 @@ export class SessionStore {
 		const now = Date.now();
 		const hoursElapsed = (now - lastActive) / (1000 * 60 * 60);
 		return hoursElapsed > STALE_HOURS;
+	}
+
+	// --- Web UI Sessions ---
+
+	saveWebSession(token: string, expiresAt: number): void {
+		this.db.run(
+			"INSERT OR REPLACE INTO web_sessions (token, created_at, expires_at) VALUES (?, ?, ?)",
+			[token, Date.now(), expiresAt],
+		);
+	}
+
+	isWebSessionValid(token: string): boolean {
+		const row = this.db.query("SELECT expires_at FROM web_sessions WHERE token = ?").get(token) as { expires_at: number } | null;
+		if (!row) return false;
+		if (Date.now() > row.expires_at) {
+			this.db.run("DELETE FROM web_sessions WHERE token = ?", [token]);
+			return false;
+		}
+		return true;
+	}
+
+	revokeAllWebSessions(): void {
+		this.db.run("DELETE FROM web_sessions");
+	}
+
+	// --- Magic Links ---
+
+	saveMagicLink(token: string, sessionToken: string, expiresAt: number): void {
+		this.db.run(
+			"INSERT OR REPLACE INTO magic_links (token, session_token, expires_at, used) VALUES (?, ?, ?, 0)",
+			[token, sessionToken, expiresAt],
+		);
+	}
+
+	consumeMagicLink(token: string): string | null {
+		const row = this.db.query("SELECT session_token, expires_at, used FROM magic_links WHERE token = ?").get(token) as { session_token: string, expires_at: number, used: number } | null;
+		
+		if (!row || row.used === 1 || Date.now() > row.expires_at) {
+			if (row) this.db.run("DELETE FROM magic_links WHERE token = ?", [token]);
+			return null;
+		}
+
+		// Mark as used and delete (one-time use)
+		this.db.run("DELETE FROM magic_links WHERE token = ?", [token]);
+		return row.session_token;
+	}
+
+	getMagicLinkCount(): number {
+		const row = this.db.query("SELECT COUNT(*) as count FROM magic_links WHERE used = 0 AND expires_at > ?").get(Date.now()) as { count: number };
+		return row.count;
 	}
 }

@@ -51,6 +51,7 @@ import { handleSchedulerToolCall, schedulerDeclarations } from "./scheduler/tool
 import { getSecretRequest } from "./secrets/store.ts";
 import { handleSecretsToolCall, secretsDeclarations } from "./secrets/tools.ts";
 import { setPublicDir, setSecretSavedCallback, setSecretsDb } from "./ui/serve.ts";
+import { createSession, setSessionStore } from "./ui/session.ts";
 import { handleWebUiToolCall, webUiDeclarations } from "./ui/tools.ts";
 
 async function main(): Promise<void> {
@@ -108,6 +109,23 @@ async function main(): Promise<void> {
 	}
 
 	const runtime = new AgentRuntime(config, db);
+
+	// Wire persistent web sessions to SQLite
+	setSessionStore(runtime.getSessionStore());
+
+	// Generate and log an Admin Magic Link for easy access
+	try {
+		const { magicToken } = createSession();
+		const baseUrl = config.public_url ?? `http://localhost:${config.port ?? 3100}`;
+		console.log("\n" + "=".repeat(60));
+		console.log("             🛡️  PHANTOM ADMIN ACCESS 🛡️");
+		console.log("=".repeat(60));
+		console.log(`  Login URL:  ${baseUrl}/ui/login?magic=${magicToken}`);
+		console.log(`  Expires:    In 10 minutes`);
+		console.log("=".repeat(60) + "\n");
+	} catch (err: unknown) {
+		console.warn(`[session] Failed to generate startup admin link: ${err}`);
+	}
 
 	if (activeRole) {
 		runtime.setRoleTemplate(activeRole);

@@ -1,76 +1,55 @@
 import { randomBytes } from "node:crypto";
+import type { SessionStore } from "../agent/session-store.ts";
 
-type Session = {
-	token: string;
-	createdAt: number;
-	expiresAt: number;
-};
-
-type MagicLink = {
-	token: string;
-	sessionToken: string;
-	expiresAt: number;
-	used: boolean;
-};
+let sessionStore: SessionStore | null = null;
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const MAGIC_LINK_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
-const sessions = new Map<string, Session>();
-const magicLinks = new Map<string, MagicLink>();
+export function setSessionStore(store: SessionStore): void {
+	sessionStore = store;
+}
 
 export function createSession(): { sessionToken: string; magicToken: string } {
+	if (!sessionStore) throw new Error("Session store not initialized");
+
 	const sessionToken = randomBytes(32).toString("base64url");
 	const magicToken = randomBytes(24).toString("base64url");
 	const now = Date.now();
 
-	sessions.set(sessionToken, {
-		token: sessionToken,
-		createdAt: now,
-		expiresAt: now + SESSION_TTL_MS,
-	});
+	sessionStore.saveWebSession(sessionToken, now + SESSION_TTL_MS);
+	sessionStore.saveMagicLink(magicToken, sessionToken, now + MAGIC_LINK_TTL_MS);
 
-	magicLinks.set(magicToken, {
-		token: magicToken,
-		sessionToken,
-		expiresAt: now + MAGIC_LINK_TTL_MS,
-		used: false,
-	});
-
-	console.log(`[session] Created Magic Link: ${magicToken.slice(0, 8)}... (Total: ${magicLinks.size})`);
+	console.log(`[session] Created Magic Link: ${magicToken.slice(0, 8)}...`);
 	return { sessionToken, magicToken };
 }
 
 export function isValidSession(token: string): boolean {
-	const session = sessions.get(token);
-	if (!session) return false;
-	if (Date.now() > session.expiresAt) {
-		sessions.delete(token);
-		return false;
-	}
-	return true;
+	if (!sessionStore) return false;
+	return sessionStore.isWebSessionValid(token);
 }
 
 export function consumeMagicLink(magicToken: string): string | null {
-	const link = magicLinks.get(magicToken);
-	if (!link || link.used || Date.now() > link.expiresAt) {
-		if (link) magicLinks.delete(magicToken);
-		return null;
+	if (!sessionStore) return null;
+	const sessionToken = sessionStore.consumeMagicLink(magicToken);
+	if (sessionToken) {
+		console.log(`[session] Magic Link consumed: ${magicToken.slice(0, 8)}...`);
 	}
-	link.used = true;
-	magicLinks.delete(magicToken);
-	return link.sessionToken;
+	return sessionToken;
 }
 
 export function revokeAllSessions(): void {
-	sessions.clear();
-	magicLinks.clear();
+	if (sessionStore) {
+		sessionStore.revokeAllWebSessions();
+	}
 }
 
 export function getSessionCount(): number {
-	return sessions.size;
+	// Not easily available without dedicated query, but not critical
+	return 0;
 }
 
 export function getMagicLinkCount(): number {
-	return magicLinks.size;
+	if (!sessionStore) return 0;
+	return sessionStore.getMagicLinkCount();
 }

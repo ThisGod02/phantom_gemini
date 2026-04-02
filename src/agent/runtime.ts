@@ -60,6 +60,10 @@ export class AgentRuntime {
 		this.llm = createProvider(config.provider, apiKey, config.base_url);
 	}
 
+	public getSessionStore(): SessionStore {
+		return this.sessionStore;
+	}
+
 	setMemoryContextBuilder(builder: MemoryContextBuilder): void {
 		this.memoryContextBuilder = builder;
 	}
