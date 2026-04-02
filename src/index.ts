@@ -363,6 +363,12 @@ async function main(): Promise<void> {
 
 		const existing = conversationMessages.get(convKey) ?? { user: [], assistant: [] };
 		existing.user.push(msg.text);
+		
+		// Pruning: Keep only the most recent 15 messages for each role
+		// to prevent context bloat (94k+ tokens) and 40s+ latency.
+		if (existing.user.length > 15) existing.user = existing.user.slice(-15);
+		if (existing.assistant.length > 15) existing.assistant = existing.assistant.slice(-15);
+		
 		conversationMessages.set(convKey, existing);
 
 		const isSlack = msg.channelId === "slack" && slackChannel && msg.metadata;
@@ -442,6 +448,9 @@ async function main(): Promise<void> {
 		// Track assistant messages
 		if (response.text) {
 			existing.assistant.push(response.text);
+			if (existing.assistant.length > 15) {
+				existing.assistant = existing.assistant.slice(-15);
+			}
 		}
 
 		// Finalize: set done reaction

@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { parse } from "yaml";
 import { type ChannelsConfig, ChannelsConfigSchema, PhantomConfigSchema } from "./schemas.ts";
 import type { PhantomConfig } from "./types.ts";
@@ -71,14 +72,18 @@ export function loadConfig(path?: string): PhantomConfig {
 		}
 	}
 
-	// Derive public_url from name + domain when not explicitly set
-	if (!config.public_url && config.domain) {
-		const derived = `https://${config.name}.${config.domain}`;
+	// Proactive: Auto-detect Public IP if missing (essential for VPS/Docker reachability)
+	if (!config.public_url && process.env.PHANTOM_DOCKER === "true") {
 		try {
-			new URL(derived);
-			config.public_url = derived;
+			// Fast sync check via shell (standard in most VPS)
+			const res = spawnSync("curl", ["-s", "https://api.ipify.org"], { timeout: 2000, encoding: "utf-8" });
+			const ip = res.stdout?.trim();
+			if (ip && /^[0-9.]+$/.test(ip)) {
+				config.public_url = `http://${ip}:${config.port}`;
+				console.log(`[config] Auto-detected public IP for VPS: ${config.public_url}`);
+			}
 		} catch {
-			// Name or domain produced an invalid URL, skip derivation
+			// Fallback silent
 		}
 	}
 
