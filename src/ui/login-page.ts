@@ -250,8 +250,14 @@ export function loginPageHtml(): string {
       var params = new URLSearchParams(location.search);
       var magic = params.get('magic');
       if (magic) {
-        authenticate(magic);
-        return;
+        // Pre-fill the input instead of auto-authenticating
+        // This prevents link-preview bots from consuming the one-time token.
+        var input = document.getElementById('token');
+        if (input) {
+          input.value = magic;
+          // Optional: Add a visual hint that it was pre-filled
+          input.classList.add('border-primary');
+        }
       }
 
       document.getElementById('login-form').addEventListener('submit', function(e) {

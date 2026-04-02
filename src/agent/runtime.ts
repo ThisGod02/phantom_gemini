@@ -10,7 +10,7 @@ import type { EvolvedConfig } from "../evolution/types.ts";
 import type { MemoryContextBuilder } from "../memory/context-builder.ts";
 import type { RoleTemplate } from "../roles/types.ts";
 import { CostTracker } from "./cost-tracker.ts";
-import { type AgentCost, type AgentResponse, emptyCost } from "./events.ts";
+import { type AgentCost, type AgentResponse } from "./events.ts";
 import { assemblePrompt, auditPromptComponents } from "./prompt-assembler.ts";
 import { SessionStore } from "./session-store.ts";
 import {
@@ -51,6 +51,8 @@ export class AgentRuntime {
 	private lastTrackedFiles: string[] = [];
 	/** Фабрики in-process инструментов. Каждый вызов возвращает свежий ToolHandler. */
 	private toolHandlerFactories: Record<string, () => ToolHandler> = {};
+	/** Очередь сообщений для каждой сессии (чтобы избежать конфликтов и "подвешивания" при массовой засылке) */
+	private messageQueues = new Map<string, Promise<any>>();
 
 	constructor(config: PhantomConfig, db: Database) {
 		this.config = config;
@@ -102,32 +104,35 @@ export class AgentRuntime {
 		const sessionKey = `${channelId}:${conversationId}`;
 		const startTime = Date.now();
 
-		if (this.activeSessions.has(sessionKey)) {
-			return {
-				text: "I'm still working on your previous message. Please wait.",
-				sessionId: "",
-				cost: emptyCost(),
-				durationMs: 0,
-			};
-		}
+		// Получаем или создаём текущую цепочку задач для этой сессии
+		const previousTask = this.messageQueues.get(sessionKey) ?? Promise.resolve();
 
-		this.activeSessions.add(sessionKey);
-		const wrappedText = this.isExternalChannel(channelId) ? this.wrapWithSecurityContext(text) : text;
+		// Создаём новую задачу, которая дождётся предыдущей
+		const nextTask = previousTask.then(async () => {
+			this.activeSessions.add(sessionKey);
+			const wrappedText = this.isExternalChannel(channelId) ? this.wrapWithSecurityContext(text) : text;
 
-		try {
-			const response = await this.runQuery(
-				sessionKey,
-				channelId,
-				conversationId,
-				wrappedText,
-				startTime,
-				onEvent,
-				metadata,
-			);
-			return response;
-		} finally {
-			this.activeSessions.delete(sessionKey);
-		}
+			try {
+				const response = await this.runQuery(
+					sessionKey,
+					channelId,
+					conversationId,
+					wrappedText,
+					startTime,
+					onEvent,
+					metadata,
+				);
+				return response;
+			} finally {
+				this.activeSessions.delete(sessionKey);
+			}
+		});
+
+		// Обновляем очередь и запускаем выполнение
+		this.messageQueues.set(sessionKey, nextTask);
+
+		// Ждём результата текущей задачи (но если за ней придут другие — они встанут в messageQueues.get(sessionKey))
+		return nextTask;
 	}
 
 	private isExternalChannel(channelId: string): boolean {

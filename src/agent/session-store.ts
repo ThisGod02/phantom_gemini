@@ -189,6 +189,7 @@ export class SessionStore {
 	// --- Magic Links ---
 
 	saveMagicLink(token: string, sessionToken: string, expiresAt: number): void {
+		console.log(`[db] Saving magic link to SQLite: ${token.slice(0, 8)}...`);
 		this.db.run(
 			"INSERT OR REPLACE INTO magic_links (token, session_token, expires_at, used) VALUES (?, ?, ?, 0)",
 			[token, sessionToken, expiresAt],
@@ -199,10 +200,14 @@ export class SessionStore {
 		const row = this.db.query("SELECT session_token, expires_at, used FROM magic_links WHERE token = ?").get(token) as { session_token: string, expires_at: number, used: number } | null;
 		
 		if (!row || row.used === 1 || Date.now() > row.expires_at) {
-			if (row) this.db.run("DELETE FROM magic_links WHERE token = ?", [token]);
+			if (row) {
+				console.log(`[db] Magic link not valid or expired: ${token.slice(0, 8)}...`);
+				this.db.run("DELETE FROM magic_links WHERE token = ?", [token]);
+			}
 			return null;
 		}
 
+		console.log(`[db] Consuming magic link from SQLite: ${token.slice(0, 8)}...`);
 		// Mark as used and delete (one-time use)
 		this.db.run("DELETE FROM magic_links WHERE token = ?", [token]);
 		return row.session_token;
