@@ -73,7 +73,7 @@ export async function callJudge<T>(options: {
 		} catch (zodErr) {
 			// SILENT RECOVERY: If Zod fails, we still use the normalized object 
 			// to avoid blocking the system with technical metadata errors.
-			// Only log a tiny warning, not the giant trace.
+			// The user wants to see these warnings for visibility.
 			console.warn(`[evolution] Judge schema mismatch (using partial result): ${options.schemaName}`);
 		}
 	} catch (err) {
@@ -205,14 +205,26 @@ function normalizeJudgeResponse(data: any): any {
 			}
 		}
 		normalized.implicit_signals = {
-			user_satisfaction: signalsObj.user_satisfaction ?? 0.5,
-			user_satisfaction_evidence: signalsObj.user_satisfaction_evidence ?? "",
-			agent_performance: signalsObj.agent_performance ?? 0.5,
-			agent_performance_evidence: signalsObj.agent_performance_evidence ?? "",
+			user_satisfaction: signalsObj.user_satisfaction ?? signalsObj.satisfaction ?? 0.5,
+			user_satisfaction_evidence: signalsObj.user_satisfaction_evidence ?? signalsObj.satisfaction_evidence ?? "",
+			agent_performance: signalsObj.agent_performance ?? signalsObj.performance ?? 0.5,
+			agent_performance_evidence: signalsObj.agent_performance_evidence ?? signalsObj.performance_evidence ?? "",
 		};
 	}
 
+	if (normalized.overall_reasoning && !normalized.reasoning) {
+		normalized.reasoning = normalized.overall_reasoning;
+	}
+
 	// Post-process specific enums or structures that models often get wrong
+	if (normalized.goal_accomplished && typeof normalized.goal_accomplished === "string") {
+		const lower = normalized.goal_accomplished.toLowerCase();
+		normalized.goal_accomplished = {
+			verdict: lower.includes("yes") || lower.includes("success") ? "yes" : lower.includes("partial") ? "partially" : "no",
+			reasoning: normalized.reasoning || normalized.overall_reasoning || "Evaluation completed"
+		};
+	}
+
 	if (normalized.category && typeof normalized.category === "string") {
 		const catMap: Record<string, string> = {
 			"process": "process",

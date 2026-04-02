@@ -43,6 +43,7 @@ export function extractObservations(session: SessionSummary): SessionObservation
 	const observations: SessionObservation[] = [];
 
 	for (const message of session.user_messages) {
+		if (!message || typeof message !== "string") continue;
 		const lower = message.toLowerCase();
 
 		if (matchesCorrectionPattern(lower)) {
@@ -286,6 +287,7 @@ export function getCritiqueJsonSchema(): Record<string, unknown> {
 }
 
 function distillCorrection(message: string): string {
+	if (!message || typeof message !== "string") return "";
 	// Remove common correction prefixes to get the actual content
 	return message
 		.replace(/^(no[,.]?\s*|actually[,.]?\s*|that'?s\s*(not|wrong|incorrect)[,.]?\s*|it\s+should\s+be\s*)/i, "")
@@ -293,5 +295,6 @@ function distillCorrection(message: string): string {
 }
 
 function distillPreference(message: string): string {
+	if (!message || typeof message !== "string") return "";
 	return message.replace(/^(i\s+prefer\s*|always\s+use\s*|never\s+(use|do)\s*|please\s+(always|never)\s*)/i, "").trim();
 }

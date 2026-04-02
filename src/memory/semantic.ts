@@ -113,11 +113,16 @@ export class SemanticStore {
 		const queryText = `${newFact.subject} ${newFact.predicate}`;
 		const queryVec = await this.embedder.embed(queryText);
 
+		const filterValue = Array.isArray(newFact.subject) ? newFact.subject[0] : newFact.subject;
+		
 		const results = await this.qdrant.search(this.collectionName, {
 			denseVector: queryVec,
 			denseVectorName: "fact",
 			filter: {
-				must: [{ key: "subject", match: { value: newFact.subject } }, { is_null: { key: "valid_until" } }],
+				must: [
+					{ key: "subject", match: { value: String(filterValue || "") } }, 
+					{ is_null: { key: "valid_until" } }
+				],
 			},
 			limit: 10,
 			withPayload: true,
@@ -162,10 +167,19 @@ export class SemanticStore {
 
 		if (options?.filters) {
 			for (const [key, value] of Object.entries(options.filters)) {
+				if (value === undefined || value === null) continue;
+				
 				if (Array.isArray(value)) {
-					must.push({ key, match: { any: value } });
+					// Clean up the array to ensure only strings/numbers/booleans
+					const cleanArray = value.filter(v => typeof v === "string" || typeof v === "number" || typeof v === "boolean");
+					if (cleanArray.length > 0) {
+						must.push({ key, match: { any: cleanArray } });
+					}
+				} else if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+					must.push({ key, match: { value: value } });
 				} else {
-					must.push({ key, match: { value } });
+					// Fallback: stringify complex objects to avoid Qdrant 400
+					must.push({ key, match: { value: String(value) } });
 				}
 			}
 		}
