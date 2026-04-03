@@ -184,6 +184,10 @@ export class GeminiCliProvider implements LLMProvider {
 			if (discovered) {
 				activeProjectId = discovered;
 				this.projectId = discovered;
+			} else {
+				// If discovery fails, but we have a project number from previous errors, 
+				// we can try to use it. For now, let's stick to DEFAULT or nothing.
+				console.warn('[gemini-cli] Fallback to default project, but expect 403 if not authorized.');
 			}
 		}
 
@@ -233,7 +237,7 @@ export class GeminiCliProvider implements LLMProvider {
 			'Content-Type': 'application/json',
 			'User-Agent': 'google-cloud-sdk vscode_cloudshelleditor/0.1',
 			'X-Goog-Api-Client': 'gl-node/22.17.0',
-			'X-Goog-User-Project': activeProjectId || DEFAULT_PROJECT_ID,
+			// Removed X-Goog-User-Project to let Google decide based on token
 			'Client-Metadata': JSON.stringify({
 				ideType: "VSCODE",
 				platform: os.platform() === 'win32' ? "WINDOWS" : "LINUX",
