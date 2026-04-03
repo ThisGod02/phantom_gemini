@@ -129,7 +129,8 @@ async function discoverProjectId(accessToken: string): Promise<string | null> {
 }
 
 function buildCCAUrl(action: string): string {
-	return `${CODE_ASSIST_ENDPOINT}/v1internal:${action}`;
+	// Try v1 instead of v1internal for broader compatibility
+	return `${CODE_ASSIST_ENDPOINT}/v1:${action}`;
 }
 
 function wrapForCCA(body: Record<string, unknown>, model: string, projectId: string): string {
@@ -218,25 +219,45 @@ export class GeminiCliProvider implements LLMProvider {
 		const url = buildCCAUrl("generateContent");
 		const wrappedBody = wrapForCCA(requestBody, modelName, activeProjectId || DEFAULT_PROJECT_ID);
 
-		const res = await fetch(url, {
+		const headers: Record<string, string> = {
+			'Authorization': `Bearer ${accessToken}`,
+			'Content-Type': 'application/json',
+			'User-Agent': 'google-cloud-sdk vscode_cloudshelleditor/0.1',
+			'X-Goog-Api-Client': 'gl-node/22.17.0',
+			'Client-Metadata': JSON.stringify({
+				ideType: "IDE_UNSPECIFIED",
+				platform: "PLATFORM_UNSPECIFIED",
+				pluginType: "GEMINI",
+			}),
+		};
+
+		if (activeProjectId && activeProjectId !== DEFAULT_PROJECT_ID) {
+			headers['x-goog-user-project'] = activeProjectId;
+		}
+
+		let res = await fetch(url, {
 			method: 'POST',
-			headers: {
-				'Authorization': `Bearer ${accessToken}`,
-				'Content-Type': 'application/json',
-				'User-Agent': 'google-cloud-sdk vscode_cloudshelleditor/0.1',
-				'X-Goog-Api-Client': 'gl-node/22.17.0',
-				'Client-Metadata': JSON.stringify({
-					ideType: "IDE_UNSPECIFIED",
-					platform: "PLATFORM_UNSPECIFIED",
-					pluginType: "GEMINI",
-				}),
-			},
+			headers,
 			body: wrappedBody,
 		});
 
+		// Fallback logic: if v1 returned 404, try v1internal
+		if (res.status === 404 && url.includes('/v1:')) {
+			const fallbackUrl = url.replace('/v1:', '/v1internal:');
+			const fallbackRes = await fetch(fallbackUrl, {
+				method: 'POST',
+				headers,
+				body: wrappedBody,
+			});
+			if (fallbackRes.ok) {
+				res = fallbackRes;
+			}
+		}
+
 		if (!res.ok) {
 			const errorText = await res.text();
-			throw new Error(errorText);
+			console.error(`[gemini-cli] API Error (${res.status}):`, errorText);
+			throw new Error(`Gemini CLI Provider Error: ${res.status} - ${errorText}`);
 		}
 
 		// CCA wraps response in: { "response": { ...gemini api response... }, "traceId": "..." }
