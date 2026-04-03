@@ -1,3 +1,6 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
 import {
 	type Content,
 	type Tool,
@@ -23,6 +26,9 @@ import type { LLMProvider, ProviderResponse } from "./types.ts";
 const CODE_ASSIST_ENDPOINT = "https://cloudcode-pa.googleapis.com";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 
+// Default internal project ID for personal accounts (from ampcode-connector/gemini-cli)
+const DEFAULT_PROJECT_ID = "rising-fact-p41fc";
+
 // OAuth client — set via env vars (see .env.example)
 const OAUTH_CLIENT_ID = process.env.PHANTOM_GOOGLE_CLIENT_ID ?? "";
 const OAUTH_CLIENT_SECRET = process.env.PHANTOM_GOOGLE_CLIENT_SECRET ?? "";
@@ -36,14 +42,11 @@ interface StoredTokens {
 }
 
 function getTokensPath(): string {
-	const os = require('os');
-	const path = require('path');
 	return path.join(os.homedir(), '.phantom', 'oauth.json');
 }
 
 function loadTokens(): StoredTokens | null {
 	try {
-		const fs = require('fs');
 		const p = getTokensPath();
 		if (!fs.existsSync(p)) return null;
 		return JSON.parse(fs.readFileSync(p, 'utf8')) as StoredTokens;
@@ -54,8 +57,6 @@ function loadTokens(): StoredTokens | null {
 
 function saveTokens(tokens: StoredTokens): void {
 	try {
-		const fs = require('fs');
-		const path = require('path');
 		const dir = path.dirname(getTokensPath());
 		if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
 		fs.writeFileSync(getTokensPath(), JSON.stringify(tokens, null, 2), { mode: 0o600 });
@@ -102,15 +103,6 @@ async function getValidAccessToken(): Promise<string | null> {
 	return tokens.access_token;
 }
 
-function generateProjectId(): string {
-	const adjectives = ["useful", "bright", "swift", "calm", "bold"];
-	const nouns = ["fuze", "wave", "spark", "flow", "core"];
-	const adj = adjectives[Math.floor(Math.random() * adjectives.length)]!;
-	const noun = nouns[Math.floor(Math.random() * nouns.length)]!;
-	const rand = crypto.randomUUID().slice(0, 5).toLowerCase();
-	return `${adj}-${noun}-${rand}`;
-}
-
 function buildCCAUrl(action: string): string {
 	return `${CODE_ASSIST_ENDPOINT}/v1internal:${action}`;
 }
@@ -132,9 +124,8 @@ export class GeminiCliProvider implements LLMProvider {
 
 	constructor(_apiKey?: string, options?: { enableSearch?: boolean }) {
 		this.options = options || {};
-		// Load project ID from stored tokens or generate a stable one
 		const tokens = loadTokens();
-		this.projectId = tokens?.project_id || generateProjectId();
+		this.projectId = tokens?.project_id || DEFAULT_PROJECT_ID;
 	}
 
 	async generateContent(

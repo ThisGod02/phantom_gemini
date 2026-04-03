@@ -88,6 +88,14 @@ function saveTokens(tokens: object): void {
 }
 
 export async function runLogin(_args: string[]): Promise<void> {
+	if (!CLIENT_ID || !CLIENT_SECRET) {
+		console.error('\n❌ Error: Missing Google OAuth credentials');
+		console.log('\nPlease add PHANTOM_GOOGLE_CLIENT_ID and PHANTOM_GOOGLE_CLIENT_SECRET to your .env file.');
+		console.log('You can find these values in .env.example or project documentation.');
+		console.log('\nThen run:');
+		console.log('bun run src/cli/main.ts login\n');
+		process.exit(1);
+	}
 	const { verifier, challenge } = generatePKCE();
 	const state = crypto.randomBytes(16).toString('hex');
 
