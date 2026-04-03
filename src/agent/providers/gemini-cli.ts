@@ -34,6 +34,10 @@ const OAUTH_CLIENT_ID = process.env.PHANTOM_GOOGLE_CLIENT_ID ?? "";
 const OAUTH_CLIENT_SECRET = process.env.PHANTOM_GOOGLE_CLIENT_SECRET ?? "";
 const CONFIG_PROJECT_ID = process.env.PHANTOM_GOOGLE_PROJECT_ID;
 
+// DEBUG: Check if env vars are loaded
+console.log(`[gemini-cli] ENV Check - Client ID: ${OAUTH_CLIENT_ID ? 'SET' : 'MISSING'}`);
+console.log(`[gemini-cli] ENV Check - Project ID: ${CONFIG_PROJECT_ID || 'MISSING'}`);
+
 interface StoredTokens {
 	access_token: string;
 	refresh_token: string;
@@ -111,7 +115,11 @@ async function discoverProjectId(accessToken: string): Promise<string | null> {
 			headers: { 'Authorization': `Bearer ${accessToken}` },
 		});
 		if (!res.ok) {
-			console.warn('[gemini-cli] Project discovery failed:', await res.text());
+			const err = await res.text();
+			console.warn('[gemini-cli] Project discovery failed:', err);
+			if (err.includes('cloudresourcemanager.googleapis.com')) {
+				console.warn('[gemini-cli] HINT: Enable Cloud Resource Manager API at https://console.developers.google.com/apis/api/cloudresourcemanager.googleapis.com/overview?project=YOUR_PROJECT_ID');
+			}
 			return null;
 		}
 		const data = await res.json() as { projects?: Array<{ projectId: string, lifecycleState: string }> };
@@ -134,15 +142,15 @@ function buildCCAUrl(action: string): string {
 
 function wrapForCCA(body: Record<string, unknown>, model: string, projectId: string): string {
 	const requestId = `pi-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
-	// The internal API expects Gemini fields inside a 'request' property,
-	// but 'model' and 'project' must also be at the top level.
 	return JSON.stringify({
 		model: model.startsWith('models/') ? model : `models/${model}`,
 		project: projectId,
 		request: body,
-		enabled_credit_types: ["G1_CREDIT_TYPE"],
 		userAgent: "pi-coding-agent",
 		requestId,
+		credits: {
+			enabled_credit_types: [], // Overrides invalid G1_CREDIT_TYPE default
+		},
 	});
 }
 
