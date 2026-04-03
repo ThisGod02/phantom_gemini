@@ -148,9 +148,6 @@ function wrapForCCA(body: Record<string, unknown>, model: string, projectId: str
 		request: body,
 		userAgent: "pi-coding-agent",
 		requestId,
-		credits: {
-			enabled_credit_types: [], // Overrides invalid G1_CREDIT_TYPE default
-		},
 	});
 }
 
@@ -235,9 +232,10 @@ export class GeminiCliProvider implements LLMProvider {
 			'X-Goog-Api-Client': 'gl-node/22.17.0',
 			'X-Goog-User-Project': activeProjectId || DEFAULT_PROJECT_ID,
 			'Client-Metadata': JSON.stringify({
-				ideType: "IDE_UNSPECIFIED",
-				platform: "PLATFORM_UNSPECIFIED",
+				ideType: "VSCODE",
+				platform: os.platform() === 'win32' ? "WINDOWS" : "LINUX",
 				pluginType: "GEMINI",
+				pluginVersion: "2.10.0",
 			}),
 		};
 
