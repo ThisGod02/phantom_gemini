@@ -27,7 +27,7 @@ const CODE_ASSIST_ENDPOINT = "https://cloudcode-pa.googleapis.com";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 
 // Default internal project ID for personal accounts (from ampcode-connector/gemini-cli)
-const DEFAULT_PROJECT_ID = "rising-fact-p41fc";
+const DEFAULT_PROJECT_ID = ""; // No default, force discovery or ENV
 
 // OAuth client — set via env vars (see .env.example)
 const OAUTH_CLIENT_ID = process.env.PHANTOM_GOOGLE_CLIENT_ID ?? "";
@@ -185,10 +185,9 @@ export class GeminiCliProvider implements LLMProvider {
 			if (discovered) {
 				activeProjectId = discovered;
 				this.projectId = discovered;
-			} else {
-				// If discovery fails, but we have a project number from previous errors, 
-				// we can try to use it. For now, let's stick to DEFAULT or nothing.
-				console.warn('[gemini-cli] Fallback to default project, but expect 403 if not authorized.');
+			} else if (activeProjectId === DEFAULT_PROJECT_ID) {
+				console.error('[gemini-cli] FAILED to discover a valid Project ID and "rising-fact-p41fc" is blocked.');
+				console.error('[gemini-cli] ACTION REQUIRED: Set PHANTOM_GOOGLE_PROJECT_ID=your-project-id in .env');
 			}
 		}
 
