@@ -134,10 +134,13 @@ function buildCCAUrl(action: string): string {
 
 function wrapForCCA(body: Record<string, unknown>, model: string, projectId: string): string {
 	const requestId = `pi-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+	// The internal API expects Gemini fields inside a 'request' property,
+	// but 'model' and 'project' must also be at the top level.
 	return JSON.stringify({
-		...body,
 		model: model.startsWith('models/') ? model : `models/${model}`,
 		project: projectId,
+		request: body,
+		enabled_credit_types: ["G1_CREDIT_TYPE"],
 		userAgent: "pi-coding-agent",
 		requestId,
 	});
