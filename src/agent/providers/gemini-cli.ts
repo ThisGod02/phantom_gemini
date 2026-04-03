@@ -32,6 +32,7 @@ const DEFAULT_PROJECT_ID = "rising-fact-p41fc";
 // OAuth client — set via env vars (see .env.example)
 const OAUTH_CLIENT_ID = process.env.PHANTOM_GOOGLE_CLIENT_ID ?? "";
 const OAUTH_CLIENT_SECRET = process.env.PHANTOM_GOOGLE_CLIENT_SECRET ?? "";
+const CONFIG_PROJECT_ID = process.env.PHANTOM_GOOGLE_PROJECT_ID;
 
 interface StoredTokens {
 	access_token: string;
@@ -103,6 +104,30 @@ async function getValidAccessToken(): Promise<string | null> {
 	return tokens.access_token;
 }
 
+async function discoverProjectId(accessToken: string): Promise<string | null> {
+	try {
+		console.log('[gemini-cli] Attempting to auto-discover Google Cloud project...');
+		const res = await fetch('https://cloudresourcemanager.googleapis.com/v1/projects', {
+			headers: { 'Authorization': `Bearer ${accessToken}` },
+		});
+		if (!res.ok) {
+			console.warn('[gemini-cli] Project discovery failed:', await res.text());
+			return null;
+		}
+		const data = await res.json() as { projects?: Array<{ projectId: string, lifecycleState: string }> };
+		const activeProjects = data.projects?.filter(p => p.lifecycleState === 'ACTIVE') || [];
+		if (activeProjects.length > 0) {
+			const pid = activeProjects[0].projectId;
+			console.log(`[gemini-cli] Discovered active project: ${pid}`);
+			return pid;
+		}
+		return null;
+	} catch (e) {
+		console.error('[gemini-cli] Error during project discovery:', e);
+		return null;
+	}
+}
+
 function buildCCAUrl(action: string): string {
 	return `${CODE_ASSIST_ENDPOINT}/v1internal:${action}`;
 }
@@ -140,6 +165,24 @@ export class GeminiCliProvider implements LLMProvider {
 			throw new Error('No OAuth token available. Run: bun run src/cli/main.ts login');
 		}
 
+		// Use project ID from: env > stored tokens > auto-discovery > absolute fallback
+		let activeProjectId = CONFIG_PROJECT_ID || this.projectId;
+
+		if (!CONFIG_PROJECT_ID && (activeProjectId === DEFAULT_PROJECT_ID || !activeProjectId)) {
+			const discovered = await discoverProjectId(accessToken);
+			if (discovered) {
+				activeProjectId = discovered;
+				// Persist it globally for this session or update tokens in future
+				this.projectId = discovered;
+			}
+		}
+
+		if (!activeProjectId || activeProjectId === DEFAULT_PROJECT_ID) {
+			console.warn('\n⚠️  WARNING: No valid Google Cloud Project ID found.');
+			console.warn('   The "rising-fact-p41fc" fallback will likely fail with 403.');
+			console.warn('   Please create a project at https://console.cloud.google.com and set PHANTOM_GOOGLE_PROJECT_ID in .env\n');
+		}
+
 		const finalTools = [...(tools || [])];
 		if (this.options.enableSearch) {
 			finalTools.push({
@@ -173,7 +216,7 @@ export class GeminiCliProvider implements LLMProvider {
 		};
 
 		const url = buildCCAUrl("generateContent");
-		const wrappedBody = wrapForCCA(requestBody, modelName, this.projectId);
+		const wrappedBody = wrapForCCA(requestBody, modelName, activeProjectId || DEFAULT_PROJECT_ID);
 
 		const res = await fetch(url, {
 			method: 'POST',
