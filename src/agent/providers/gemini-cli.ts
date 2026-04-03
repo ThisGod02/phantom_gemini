@@ -120,6 +120,9 @@ async function discoverProjectId(accessToken: string): Promise<string | null> {
 			if (err.includes('cloudresourcemanager.googleapis.com')) {
 				console.warn('[gemini-cli] HINT: Enable Cloud Resource Manager API at https://console.developers.google.com/apis/api/cloudresourcemanager.googleapis.com/overview?project=YOUR_PROJECT_ID');
 			}
+			if (err.includes('cloudcode-pa.googleapis.com')) {
+				console.warn('[gemini-cli] HINT: Enable Cloud Code Private API at https://console.developers.google.com/apis/api/cloudcode-pa.googleapis.com/overview?project=YOUR_PROJECT_ID');
+			}
 			return null;
 		}
 		const data = await res.json() as { projects?: Array<{ projectId: string, lifecycleState: string }> };
@@ -248,6 +251,9 @@ export class GeminiCliProvider implements LLMProvider {
 		if (!res.ok) {
 			const errorText = await res.text();
 			console.error(`[gemini-cli] API Error (${res.status}):`, errorText);
+			if (errorText.includes('cloudcode-pa.googleapis.com')) {
+				console.warn(`[gemini-cli] HINT: Enable Cloud Code Private API at https://console.developers.google.com/apis/api/cloudcode-pa.googleapis.com/overview?project=${activeProjectId || DEFAULT_PROJECT_ID}`);
+			}
 			throw new Error(`Gemini CLI Provider Error: ${res.status} - ${errorText}`);
 		}
 
