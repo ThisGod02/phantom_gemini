@@ -1,64 +1,140 @@
 import {
-	FunctionCallingConfigMode,
 	type Content,
 	type Tool,
 } from "@google/genai";
 import type { LLMProvider, ProviderResponse } from "./types.ts";
 
-const GEMINI_API_BASE = "https://generativelanguage.googleapis.com";
-
 /**
- * GeminiCliProvider uses the Gemini REST API directly with a Bearer token.
- * 
- * The @google/genai Node SDK always injects its own NodeAuth/ADC credentials
- * which overrides any manually set headers. The only reliable way to use a
- * personal OAuth token is to make raw fetch() calls to the REST API directly.
- * 
- * When no GOOGLE_API_KEY is set, it reads the cached OAuth token from
- * ~/.gemini/oauth_creds.json (written by `bun run src/cli/main.ts login`).
+ * GeminiCliProvider — uses the Cloud Code Assist API (cloudcode-pa.googleapis.com)
+ * with personal Google OAuth credentials.
+ *
+ * This endpoint accepts the standard `cloud-platform` OAuth scope that
+ * `gemini-cli login` produces, unlike generativelanguage.googleapis.com which
+ * requires the `generative-language` scope.
+ *
+ * Auth flow:
+ *   1. User runs: bun run src/cli/main.ts login
+ *   2. We store tokens at ~/.phantom/oauth.json
+ *   3. On each request, refresh the token if expired, then call CCA.
+ *
+ * Inspired by https://github.com/nghyane/ampcode-connector (MIT License)
  */
+
+const CODE_ASSIST_ENDPOINT = "https://cloudcode-pa.googleapis.com";
+const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
+
+// OAuth client — set via env vars (see .env.example)
+const OAUTH_CLIENT_ID = process.env.PHANTOM_GOOGLE_CLIENT_ID ?? "";
+const OAUTH_CLIENT_SECRET = process.env.PHANTOM_GOOGLE_CLIENT_SECRET ?? "";
+
+interface StoredTokens {
+	access_token: string;
+	refresh_token: string;
+	expires_at: number; // unix ms
+	email?: string;
+	project_id?: string;
+}
+
+function getTokensPath(): string {
+	const os = require('os');
+	const path = require('path');
+	return path.join(os.homedir(), '.phantom', 'oauth.json');
+}
+
+function loadTokens(): StoredTokens | null {
+	try {
+		const fs = require('fs');
+		const p = getTokensPath();
+		if (!fs.existsSync(p)) return null;
+		return JSON.parse(fs.readFileSync(p, 'utf8')) as StoredTokens;
+	} catch {
+		return null;
+	}
+}
+
+function saveTokens(tokens: StoredTokens): void {
+	try {
+		const fs = require('fs');
+		const path = require('path');
+		const dir = path.dirname(getTokensPath());
+		if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+		fs.writeFileSync(getTokensPath(), JSON.stringify(tokens, null, 2), { mode: 0o600 });
+	} catch (e) {
+		console.error('[gemini-cli] Failed to save tokens:', e);
+	}
+}
+
+async function refreshAccessToken(refreshToken: string): Promise<StoredTokens | null> {
+	const res = await fetch(GOOGLE_TOKEN_URL, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+		body: new URLSearchParams({
+			client_id: OAUTH_CLIENT_ID,
+			client_secret: OAUTH_CLIENT_SECRET,
+			refresh_token: refreshToken,
+			grant_type: 'refresh_token',
+		}),
+	});
+	if (!res.ok) {
+		console.error('[gemini-cli] Token refresh failed:', await res.text());
+		return null;
+	}
+	const data = await res.json() as { access_token: string; expires_in: number };
+	return {
+		access_token: data.access_token,
+		refresh_token: refreshToken,
+		expires_at: Date.now() + (data.expires_in - 60) * 1000,
+	};
+}
+
+async function getValidAccessToken(): Promise<string | null> {
+	let tokens = loadTokens();
+	if (!tokens) return null;
+
+	// Refresh if expired or about to expire (within 5 minutes)
+	if (Date.now() >= tokens.expires_at - 5 * 60 * 1000) {
+		const refreshed = await refreshAccessToken(tokens.refresh_token);
+		if (!refreshed) return null;
+		tokens = { ...tokens, ...refreshed };
+		saveTokens(tokens);
+	}
+
+	return tokens.access_token;
+}
+
+function generateProjectId(): string {
+	const adjectives = ["useful", "bright", "swift", "calm", "bold"];
+	const nouns = ["fuze", "wave", "spark", "flow", "core"];
+	const adj = adjectives[Math.floor(Math.random() * adjectives.length)]!;
+	const noun = nouns[Math.floor(Math.random() * nouns.length)]!;
+	const rand = crypto.randomUUID().slice(0, 5).toLowerCase();
+	return `${adj}-${noun}-${rand}`;
+}
+
+function buildCCAUrl(action: string): string {
+	return `${CODE_ASSIST_ENDPOINT}/v1internal:${action}`;
+}
+
+function wrapForCCA(body: Record<string, unknown>, model: string, projectId: string): string {
+	const requestId = `pi-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+	return JSON.stringify({
+		project: projectId,
+		model,
+		request: body,
+		userAgent: "pi-coding-agent",
+		requestId,
+	});
+}
+
 export class GeminiCliProvider implements LLMProvider {
-	private apiKey?: string;
-	private accessToken?: string;
 	private options: { enableSearch?: boolean };
+	private projectId: string;
 
-	constructor(apiKey?: string, options?: { enableSearch?: boolean }) {
+	constructor(_apiKey?: string, options?: { enableSearch?: boolean }) {
 		this.options = options || {};
-		this.apiKey = apiKey || process.env.GOOGLE_API_KEY;
-
-		// If no API key, try to load OAuth token from Gemini CLI config
-		if (!this.apiKey) {
-			try {
-				const os = require('os');
-				const fs = require('fs');
-				const path = require('path');
-				const homedir = os.homedir();
-				const credsPath = path.join(homedir, '.gemini', 'oauth_creds.json');
-				
-				if (fs.existsSync(credsPath)) {
-					const creds = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
-					if (creds.access_token) {
-						this.accessToken = creds.access_token;
-						console.log(`[gemini-cli] OAuth session active (token detected)`);
-					}
-				}
-			} catch (e) {
-				// Silent fail
-			}
-		}
-	}
-
-	private getAuthHeaders(): Record<string, string> {
-		if (this.accessToken) {
-			return { 'Authorization': `Bearer ${this.accessToken}` };
-		}
-		return {};
-	}
-
-	private getApiVersionAndUrl(model: string): { url: string; apiVersion: string } {
-		const apiVersion = "v1beta";
-		const url = `${GEMINI_API_BASE}/${apiVersion}/models/${model}:generateContent`;
-		return { url, apiVersion };
+		// Load project ID from stored tokens or generate a stable one
+		const tokens = loadTokens();
+		this.projectId = tokens?.project_id || generateProjectId();
 	}
 
 	async generateContent(
@@ -68,9 +144,12 @@ export class GeminiCliProvider implements LLMProvider {
 		tools: Tool[],
 		options?: { responseMimeType?: string },
 	): Promise<ProviderResponse> {
+		const accessToken = await getValidAccessToken();
+		if (!accessToken) {
+			throw new Error('No OAuth token available. Run: bun run src/cli/main.ts login');
+		}
+
 		const finalTools = [...(tools || [])];
-		
-		// Add Google Search grounding if enabled
 		if (this.options.enableSearch) {
 			finalTools.push({
 				googleSearchRetrieval: {
@@ -82,46 +161,43 @@ export class GeminiCliProvider implements LLMProvider {
 			} as any);
 		}
 
-		// Map model name and check for invalid versions
 		let modelName = model.replace('google/', '');
-		if (modelName.startsWith('gemini-3')) {
-			console.warn(`[gemini-cli] WARNING: Model "${modelName}" is likely invalid. Defaulting to "gemini-2.0-flash".`);
+		if (modelName.startsWith('gemini-3') && !modelName.includes('preview')) {
 			modelName = "gemini-2.0-flash";
 		}
 
-		const { url } = this.getApiVersionAndUrl(modelName);
-
-		// Build request body (REST API format)
-		const requestBody: any = {
+		// Standard Gemini API request body
+		const requestBody: Record<string, unknown> = {
 			contents,
 			generationConfig: {
 				...(options?.responseMimeType && { responseMimeType: options.responseMimeType }),
 			},
-			tools: finalTools.length > 0 ? finalTools : undefined,
-			toolConfig: finalTools.length > 0 ? {
-				functionCallingConfig: { mode: "AUTO" }
-			} : undefined,
+			...(finalTools.length > 0 && {
+				tools: finalTools,
+				toolConfig: { functionCallingConfig: { mode: "AUTO" } },
+			}),
+			...(systemInstruction && {
+				systemInstruction: { parts: [{ text: systemInstruction }] },
+			}),
 		};
 
-		if (systemInstruction) {
-			requestBody.systemInstruction = { parts: [{ text: systemInstruction }] };
-		}
+		const url = buildCCAUrl("generateContent");
+		const wrappedBody = wrapForCCA(requestBody, modelName, this.projectId);
 
-		// Build headers
-		const headers: Record<string, string> = {
-			'Content-Type': 'application/json',
-			...this.getAuthHeaders(),
-		};
-
-		// If using API key (not OAuth), append it as query param (standard way)
-		const requestUrl = this.apiKey
-			? `${url}?key=${this.apiKey}`
-			: url;
-
-		const res = await fetch(requestUrl, {
+		const res = await fetch(url, {
 			method: 'POST',
-			headers,
-			body: JSON.stringify(requestBody),
+			headers: {
+				'Authorization': `Bearer ${accessToken}`,
+				'Content-Type': 'application/json',
+				'User-Agent': 'google-cloud-sdk vscode_cloudshelleditor/0.1',
+				'X-Goog-Api-Client': 'gl-node/22.17.0',
+				'Client-Metadata': JSON.stringify({
+					ideType: "IDE_UNSPECIFIED",
+					platform: "PLATFORM_UNSPECIFIED",
+					pluginType: "GEMINI",
+				}),
+			},
+			body: wrappedBody,
 		});
 
 		if (!res.ok) {
@@ -129,12 +205,12 @@ export class GeminiCliProvider implements LLMProvider {
 			throw new Error(errorText);
 		}
 
-		const data = await res.json() as any;
+		// CCA wraps response in: { "response": { ...gemini api response... }, "traceId": "..." }
+		const envelope = await res.json() as { response?: any };
+		const data = envelope.response ?? envelope;
 
-		// Parse response
 		const candidate = data.candidates?.[0];
-		const content = candidate?.content;
-		const parts = content?.parts || [];
+		const parts = candidate?.content?.parts || [];
 
 		let text: string | undefined;
 		let functionCalls: Array<{ name: string; args: Record<string, unknown> }> | undefined;
@@ -161,24 +237,12 @@ export class GeminiCliProvider implements LLMProvider {
 				candidatesTokenCount: usageMeta.candidatesTokenCount ?? 0,
 			} : undefined,
 			functionCalls,
-			rawContentToAppend: content,
+			rawContentToAppend: candidate?.content,
 		};
 	}
 
-	estimateCost(model: string, inputTokens: number, outputTokens: number): number {
-		// If using OAuth Account Login, the cost is covered by a subscription 
-		// (Google One / GCA) - so we report 0 to avoid confusing the user.
-		if (!this.apiKey) {
-			return 0;
-		}
-
-		let inputPer1M = 0.15;
-		let outputPer1M = 0.60;
-		if (model.includes("pro")) {
-			inputPer1M = 1.25;
-			outputPer1M = 10.0;
-		}
-		
-		return (inputTokens / 1_000_000) * inputPer1M + (outputTokens / 1_000_000) * outputPer1M;
+	estimateCost(_model: string, _inputTokens: number, _outputTokens: number): number {
+		// OAuth/subscription-based — no per-token cost
+		return 0;
 	}
 }
