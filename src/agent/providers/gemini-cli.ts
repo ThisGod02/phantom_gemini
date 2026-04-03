@@ -133,10 +133,13 @@ function buildCCAUrl(action: string): string {
 }
 
 function wrapForCCA(body: Record<string, unknown>, model: string, projectId: string): string {
+	const requestId = `pi-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
 	return JSON.stringify({
 		model: model.startsWith('models/') ? model : `models/${model}`,
 		project: projectId,
-		request_body: body,
+		request: body,
+		userAgent: "pi-coding-agent",
+		requestId,
 	});
 }
 
@@ -219,6 +222,11 @@ export class GeminiCliProvider implements LLMProvider {
 			'Content-Type': 'application/json',
 			'User-Agent': 'google-cloud-sdk vscode_cloudshelleditor/0.1',
 			'X-Goog-Api-Client': 'gl-node/22.17.0',
+			'Client-Metadata': JSON.stringify({
+				ideType: "IDE_UNSPECIFIED",
+				platform: "PLATFORM_UNSPECIFIED",
+				pluginType: "GEMINI",
+			}),
 		};
 
 		if (activeProjectId && activeProjectId !== DEFAULT_PROJECT_ID) {
