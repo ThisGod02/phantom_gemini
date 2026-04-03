@@ -129,18 +129,14 @@ async function discoverProjectId(accessToken: string): Promise<string | null> {
 }
 
 function buildCCAUrl(action: string): string {
-	// Try v1 instead of v1internal for broader compatibility
-	return `${CODE_ASSIST_ENDPOINT}/v1:${action}`;
+	return `${CODE_ASSIST_ENDPOINT}/v1internal:${action}`;
 }
 
 function wrapForCCA(body: Record<string, unknown>, model: string, projectId: string): string {
-	const requestId = `pi-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
 	return JSON.stringify({
+		model: model.startsWith('models/') ? model : `models/${model}`,
 		project: projectId,
-		model,
-		request: body,
-		userAgent: "pi-coding-agent",
-		requestId,
+		request_body: body,
 	});
 }
 
@@ -173,16 +169,14 @@ export class GeminiCliProvider implements LLMProvider {
 			const discovered = await discoverProjectId(accessToken);
 			if (discovered) {
 				activeProjectId = discovered;
-				// Persist it globally for this session or update tokens in future
 				this.projectId = discovered;
 			}
 		}
 
-		if (!activeProjectId || activeProjectId === DEFAULT_PROJECT_ID) {
-			console.warn('\n⚠️  WARNING: No valid Google Cloud Project ID found.');
-			console.warn('   The "rising-fact-p41fc" fallback will likely fail with 403.');
-			console.warn('   Please create a project at https://console.cloud.google.com and set PHANTOM_GOOGLE_PROJECT_ID in .env\n');
-		}
+		// DEBUG: Log status (masked)
+		console.log(`[gemini-cli] Requesting ${model} using project: ${activeProjectId || 'NONE'}`);
+		const tokenPreview = `${accessToken.slice(0, 10)}...${accessToken.slice(-5)}`;
+		console.log(`[gemini-cli] Token preview: ${tokenPreview}`);
 
 		const finalTools = [...(tools || [])];
 		if (this.options.enableSearch) {
@@ -201,11 +195,12 @@ export class GeminiCliProvider implements LLMProvider {
 			modelName = "gemini-2.0-flash";
 		}
 
-		// Standard Gemini API request body
+		// Standard Gemini API request body ($body in CCA wrapper)
 		const requestBody: Record<string, unknown> = {
 			contents,
 			generationConfig: {
 				...(options?.responseMimeType && { responseMimeType: options.responseMimeType }),
+				temperature: 0.2, // Consistent for agents
 			},
 			...(finalTools.length > 0 && {
 				tools: finalTools,
@@ -224,35 +219,17 @@ export class GeminiCliProvider implements LLMProvider {
 			'Content-Type': 'application/json',
 			'User-Agent': 'google-cloud-sdk vscode_cloudshelleditor/0.1',
 			'X-Goog-Api-Client': 'gl-node/22.17.0',
-			'Client-Metadata': JSON.stringify({
-				ideType: "IDE_UNSPECIFIED",
-				platform: "PLATFORM_UNSPECIFIED",
-				pluginType: "GEMINI",
-			}),
 		};
 
 		if (activeProjectId && activeProjectId !== DEFAULT_PROJECT_ID) {
 			headers['x-goog-user-project'] = activeProjectId;
 		}
 
-		let res = await fetch(url, {
+		const res = await fetch(url, {
 			method: 'POST',
 			headers,
 			body: wrappedBody,
 		});
-
-		// Fallback logic: if v1 returned 404, try v1internal
-		if (res.status === 404 && url.includes('/v1:')) {
-			const fallbackUrl = url.replace('/v1:', '/v1internal:');
-			const fallbackRes = await fetch(fallbackUrl, {
-				method: 'POST',
-				headers,
-				body: wrappedBody,
-			});
-			if (fallbackRes.ok) {
-				res = fallbackRes;
-			}
-		}
 
 		if (!res.ok) {
 			const errorText = await res.text();
