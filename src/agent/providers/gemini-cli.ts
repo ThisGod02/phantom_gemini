@@ -132,15 +132,18 @@ function buildCCAUrl(action: string): string {
 	return `${CODE_ASSIST_ENDPOINT}/v1internal:${action}`;
 }
 
-function wrapForCCA(body: Record<string, unknown>, model: string, projectId: string): string {
+function wrapForCCA(body: Record<string, unknown>, model: string, projectId?: string): string {
 	const requestId = `pi-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
-	return JSON.stringify({
+	const payload: any = {
 		model: model.startsWith('models/') ? model : `models/${model}`,
-		project: projectId,
 		request: body,
 		userAgent: "pi-coding-agent",
 		requestId,
-	});
+	};
+	if (projectId && projectId !== DEFAULT_PROJECT_ID) {
+		payload.project = projectId;
+	}
+	return JSON.stringify(payload);
 }
 
 export class GeminiCliProvider implements LLMProvider {
@@ -165,19 +168,16 @@ export class GeminiCliProvider implements LLMProvider {
 			throw new Error('No OAuth token available. Run: bun run src/cli/main.ts login');
 		}
 
-		// Use project ID from: env > stored tokens > auto-discovery > absolute fallback
-		let activeProjectId = CONFIG_PROJECT_ID || this.projectId;
+		// Use project ID from: env > auto-discovery > absolute fallback
+		let activeProjectId = CONFIG_PROJECT_ID;
 
-		if (!CONFIG_PROJECT_ID && (activeProjectId === DEFAULT_PROJECT_ID || !activeProjectId)) {
+		if (!activeProjectId) {
 			const discovered = await discoverProjectId(accessToken);
-			if (discovered) {
-				activeProjectId = discovered;
-				this.projectId = discovered;
-			}
+			if (discovered) activeProjectId = discovered;
 		}
 
 		// DEBUG: Log status (masked)
-		console.log(`[gemini-cli] Requesting ${model} using project: ${activeProjectId || 'NONE'}`);
+		console.log(`[gemini-cli] Requesting ${model} using project: ${activeProjectId || 'DEFAULT (None)'}`);
 		const tokenPreview = `${accessToken.slice(0, 10)}...${accessToken.slice(-5)}`;
 		console.log(`[gemini-cli] Token preview: ${tokenPreview}`);
 
@@ -215,7 +215,7 @@ export class GeminiCliProvider implements LLMProvider {
 		};
 
 		const url = buildCCAUrl("generateContent");
-		const wrappedBody = wrapForCCA(requestBody, modelName, activeProjectId || DEFAULT_PROJECT_ID);
+		const wrappedBody = wrapForCCA(requestBody, modelName, activeProjectId);
 
 		const headers: Record<string, string> = {
 			'Authorization': `Bearer ${accessToken}`,
@@ -229,7 +229,7 @@ export class GeminiCliProvider implements LLMProvider {
 			}),
 		};
 
-		if (activeProjectId && activeProjectId !== DEFAULT_PROJECT_ID) {
+		if (activeProjectId) {
 			headers['x-goog-user-project'] = activeProjectId;
 		}
 
