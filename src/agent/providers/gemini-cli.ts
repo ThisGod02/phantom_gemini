@@ -237,7 +237,7 @@ export class GeminiCliProvider implements LLMProvider {
 			'Content-Type': 'application/json',
 			'User-Agent': 'google-cloud-sdk vscode_cloudshelleditor/0.1',
 			'X-Goog-Api-Client': 'gl-node/22.17.0',
-			// Removed X-Goog-User-Project to let Google decide based on token
+			'X-Goog-User-Project': activeProjectId || DEFAULT_PROJECT_ID,
 			'Client-Metadata': JSON.stringify({
 				ideType: "VSCODE",
 				platform: os.platform() === 'win32' ? "WINDOWS" : "LINUX",
