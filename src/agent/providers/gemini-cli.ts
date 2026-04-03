@@ -151,6 +151,7 @@ function wrapForCCA(body: Record<string, unknown>, model: string, projectId: str
 		request: body,
 		userAgent: "pi-coding-agent",
 		requestId,
+		requestType: "agent",
 	});
 }
 
