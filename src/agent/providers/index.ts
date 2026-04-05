@@ -15,7 +15,10 @@ export function createProvider(
 	}
 
 	if (providerType === "gemini-cli") {
-		return new GeminiCliProvider(apiKey, options);
+		return new GeminiCliProvider(apiKey, { 
+			...options, 
+			useAntigravity: process.env.PHANTOM_ANTIGRAVITY === 'true' 
+		});
 	}
 
 	// Default native google genai

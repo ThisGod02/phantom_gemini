@@ -143,23 +143,24 @@ function buildCCAUrl(action: string): string {
 	return `${CODE_ASSIST_ENDPOINT}/v1internal:${action}`;
 }
 
-function wrapForCCA(body: Record<string, unknown>, model: string, projectId: string): string {
-	const requestId = `pi-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+function wrapForCCA(body: Record<string, unknown>, model: string, projectId: string, useAntigravity: boolean): string {
+	const prefix = useAntigravity ? "agent" : "pi";
+	const requestId = `${prefix}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
 	return JSON.stringify({
 		model: model.startsWith('models/') ? model : `models/${model}`,
 		project: projectId,
 		request: body,
-		userAgent: "pi-coding-agent",
+		userAgent: useAntigravity ? "antigravity" : "pi-coding-agent",
 		requestId,
 		requestType: "agent",
 	});
 }
 
 export class GeminiCliProvider implements LLMProvider {
-	private options: { enableSearch?: boolean };
+	private options: { enableSearch?: boolean; useAntigravity?: boolean };
 	private projectId: string;
 
-	constructor(_apiKey?: string, options?: { enableSearch?: boolean }) {
+	constructor(_apiKey?: string, options?: { enableSearch?: boolean; useAntigravity?: boolean }) {
 		this.options = options || {};
 		const tokens = loadTokens();
 		this.projectId = tokens?.project_id || DEFAULT_PROJECT_ID;
@@ -186,9 +187,15 @@ export class GeminiCliProvider implements LLMProvider {
 				activeProjectId = discovered;
 				this.projectId = discovered;
 			} else if (activeProjectId === DEFAULT_PROJECT_ID) {
-				console.error('[gemini-cli] FAILED to discover a valid Project ID and "rising-fact-p41fc" is blocked.');
+				console.error('[gemini-cli] FAILED to discover a valid Project ID.');
 				console.error('[gemini-cli] ACTION REQUIRED: Set PHANTOM_GOOGLE_PROJECT_ID=your-project-id in .env');
 			}
+		}
+
+		if (!activeProjectId) {
+			throw new Error(
+				'Gemini CLI provider requires a Google Cloud project ID. Set PHANTOM_GOOGLE_PROJECT_ID and ensure Cloud Code API is enabled.',
+			);
 		}
 
 		// DEBUG: Log status (masked)
@@ -230,19 +237,23 @@ export class GeminiCliProvider implements LLMProvider {
 		};
 
 		const url = buildCCAUrl("generateContent");
-		const wrappedBody = wrapForCCA(requestBody, modelName, activeProjectId || DEFAULT_PROJECT_ID);
+		const wrappedBody = wrapForCCA(requestBody, modelName, activeProjectId, !!this.options.useAntigravity);
 
 		const headers: Record<string, string> = {
 			'Authorization': `Bearer ${accessToken}`,
 			'Content-Type': 'application/json',
-			'User-Agent': 'google-cloud-sdk vscode_cloudshelleditor/0.1',
-			'X-Goog-Api-Client': 'gl-node/22.17.0',
-			'X-Goog-User-Project': activeProjectId || DEFAULT_PROJECT_ID,
+			'User-Agent': this.options.useAntigravity 
+				? 'antigravity/1.104.0 darwin/arm64' 
+				: 'google-cloud-sdk vscode_cloudshelleditor/0.1',
+			'X-Goog-Api-Client': this.options.useAntigravity 
+				? 'google-cloud-sdk vscode_cloudshelleditor/0.1' 
+				: 'gl-node/22.17.0',
+			'X-Goog-User-Project': activeProjectId,
 			'Client-Metadata': JSON.stringify({
-				ideType: "VSCODE",
-				platform: os.platform() === 'win32' ? "WINDOWS" : "LINUX",
+				ideType: this.options.useAntigravity ? "IDE_UNSPECIFIED" : "VSCODE",
+				platform: this.options.useAntigravity ? "PLATFORM_UNSPECIFIED" : (os.platform() === 'win32' ? "WINDOWS" : "LINUX"),
 				pluginType: "GEMINI",
-				pluginVersion: "2.10.0",
+				...(this.options.useAntigravity ? {} : { pluginVersion: "2.10.0" }),
 			}),
 		};
 

@@ -42,9 +42,13 @@ export function loadConfig(path?: string): PhantomConfig {
 		config.role = process.env.PHANTOM_ROLE.trim();
 	}
 	if (process.env.PHANTOM_PROVIDER) {
-		const provider = process.env.PHANTOM_PROVIDER;
-		if (provider === "google" || provider === "openai") {
+		const provider = process.env.PHANTOM_PROVIDER.trim().toLowerCase();
+		if (provider === "google" || provider === "openai" || provider === "gemini-cli") {
 			config.provider = provider;
+		}
+		// Backward-compatible alias from older docs/env examples.
+		if (provider === "gemini") {
+			config.provider = "google";
 		}
 	}
 	if (process.env.PHANTOM_BASE_URL) {
