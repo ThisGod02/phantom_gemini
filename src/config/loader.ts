@@ -43,7 +43,7 @@ export function loadConfig(path?: string): PhantomConfig {
 	}
 	if (process.env.PHANTOM_PROVIDER) {
 		const provider = process.env.PHANTOM_PROVIDER.trim().toLowerCase();
-		if (provider === "google" || provider === "openai" || provider === "gemini-cli") {
+		if (provider === "google" || provider === "openai" || provider === "gemini-cli" || provider === "ollama") {
 			config.provider = provider;
 		}
 		// Backward-compatible alias from older docs/env examples.
@@ -53,6 +53,14 @@ export function loadConfig(path?: string): PhantomConfig {
 	}
 	if (process.env.PHANTOM_BASE_URL) {
 		config.base_url = process.env.PHANTOM_BASE_URL;
+	}
+	if (process.env.PHANTOM_ENABLE_SEARCH) {
+		const value = process.env.PHANTOM_ENABLE_SEARCH.trim().toLowerCase();
+		if (value === "true" || value === "1" || value === "yes") {
+			config.enable_search = true;
+		} else if (value === "false" || value === "0" || value === "no") {
+			config.enable_search = false;
+		}
 	}
 	if (process.env.PHANTOM_EFFORT) {
 		const effort = process.env.PHANTOM_EFFORT;

@@ -8,6 +8,7 @@ type InitAnswers = {
 	name: string;
 	role: string;
 	port: number;
+	provider: string;
 	model: string;
 	domain?: string;
 	public_url?: string;
@@ -40,6 +41,7 @@ function generatePhantomYaml(answers: InitAnswers): string {
 		name: answers.name,
 		port: answers.port,
 		role: answers.role,
+		provider: answers.provider,
 		model: answers.model,
 		effort: answers.effort ?? "max",
 		max_budget_usd: 0,
@@ -184,6 +186,7 @@ export async function runInit(args: string[]): Promise<void> {
 		const envName = process.env.PHANTOM_NAME ?? process.env.AGENT_NAME;
 		const envRole = process.env.PHANTOM_ROLE ?? process.env.AGENT_ROLE;
 		const envPort = process.env.PORT;
+		const envProvider = process.env.PHANTOM_PROVIDER;
 		const envModel = process.env.PHANTOM_MODEL;
 		const envDomain = process.env.PHANTOM_DOMAIN;
 		const envPublicUrl = process.env.PHANTOM_PUBLIC_URL;
@@ -198,7 +201,8 @@ export async function runInit(args: string[]): Promise<void> {
 			name: values.name ?? envName ?? "phantom",
 			role: values.role ?? envRole ?? "swe",
 			port: values.port ? Number.parseInt(values.port, 10) : envPort ? Number.parseInt(envPort, 10) : 3100,
-			model: envModel ?? "claude-sonnet-4-6",
+			provider: envProvider ?? "ollama",
+			model: envModel ?? "qwen3:4b",
 			domain: envDomain,
 			public_url: envPublicUrl,
 			effort: envEffort,
@@ -224,7 +228,8 @@ export async function runInit(args: string[]): Promise<void> {
 				port: values.port
 					? Number.parseInt(values.port, 10)
 					: Number.parseInt(await prompt(rl, "HTTP port", "3100"), 10),
-				model: await prompt(rl, "Model (claude-sonnet-4-6, claude-opus-4-6)", "claude-sonnet-4-6"),
+				provider: await prompt(rl, "Provider (ollama, google, openai, gemini-cli)", "ollama"),
+				model: await prompt(rl, "Model", "qwen3:4b"),
 			};
 
 			console.log("\nSlack setup (optional, press Enter to skip):");
@@ -302,9 +307,15 @@ export async function runInit(args: string[]): Promise<void> {
 	}
 
 	console.log("\nNext steps:");
-	console.log("  1. Set GOOGLE_API_KEY in your environment");
-	console.log("  2. Start Docker services: docker compose up -d");
-	console.log("  3. Start Phantom: phantom start");
+	if (answers.provider === "ollama") {
+		console.log("  1. Start Docker services: docker compose up -d");
+		console.log(`  2. Ensure Ollama pulls ${answers.model} on first boot`);
+		console.log("  3. Start Phantom: phantom start");
+	} else {
+		console.log(`  1. Set credentials for provider '${answers.provider}' in your environment`);
+		console.log("  2. Start Docker services: docker compose up -d");
+		console.log("  3. Start Phantom: phantom start");
+	}
 	console.log("  4. Connect from Claude Code:");
 	console.log(`     claude mcp add phantom -- curl -H "Authorization: Bearer ${mcp.adminToken}" https://your-host/mcp`);
 }

@@ -2,6 +2,7 @@ import type { LLMProvider } from "./types.ts";
 import { GeminiProvider } from "./gemini.ts";
 import { OpenAIProvider } from "./openai.ts";
 import { GeminiCliProvider } from "./gemini-cli.ts";
+import { OllamaProvider } from "./ollama.ts";
 
 export function createProvider(
 	providerType: string, 
@@ -19,6 +20,10 @@ export function createProvider(
 			...options, 
 			useAntigravity: process.env.PHANTOM_ANTIGRAVITY === 'true' 
 		});
+	}
+
+	if (providerType === "ollama") {
+		return new OllamaProvider(baseUrl);
 	}
 
 	// Default native google genai

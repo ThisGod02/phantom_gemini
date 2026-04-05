@@ -82,11 +82,11 @@ This is what happens when you give an AI its own computer.
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ghostwright/phantom/main/docker-compose.user.yaml -o docker-compose.yaml
 curl -fsSL https://raw.githubusercontent.com/ghostwright/phantom/main/.env.example -o .env
-# Edit .env - add your ANTHROPIC_API_KEY, Slack tokens, and OWNER_SLACK_USER_ID
+# Edit .env - default free mode uses Ollama locally, then add Telegram/Slack tokens if needed
 docker compose up -d
 ```
 
-Your Phantom is running. Qdrant starts for memory, Ollama pulls the embedding model, and the agent boots. Check health at `http://localhost:3100/health`. With Slack configured, it DMs you when it's ready. Add `RESEND_API_KEY` for email sending. See [Getting Started](docs/getting-started.md) for full setup.
+Your Phantom is running. Qdrant starts for memory, Ollama pulls the embedding model plus the default local chat model, and the agent boots without any paid API key. Check health at `http://localhost:3100/health`. With Telegram or Slack configured, it starts responding there once ready. Add `RESEND_API_KEY` only if you want outbound email. See [Getting Started](docs/getting-started.md) for full setup.
 
 ### Managed (free)
 

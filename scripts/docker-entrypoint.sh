@@ -13,6 +13,8 @@ fi
 QDRANT_URL="${QDRANT_URL:-http://qdrant:6333}"
 OLLAMA_URL="${OLLAMA_URL:-http://ollama:11434}"
 EMBEDDING_MODEL="${EMBEDDING_MODEL:-nomic-embed-text}"
+PHANTOM_PROVIDER="${PHANTOM_PROVIDER:-ollama}"
+CHAT_MODEL="${PHANTOM_MODEL:-qwen3:4b}"
 
 # 1. Wait for Qdrant to be healthy (up to 60 seconds)
 echo "[phantom] Waiting for Qdrant at ${QDRANT_URL}..."
@@ -58,6 +60,23 @@ if [ "$OLLAMA_READY" = true ]; then
     echo "[phantom] Model pull complete"
   else
     echo "[phantom] Embedding model ${EMBEDDING_MODEL} already available"
+  fi
+fi
+
+# 3b. Pull the local chat model when running in fully free Ollama mode
+if [ "$OLLAMA_READY" = true ] && [ "$PHANTOM_PROVIDER" = "ollama" ]; then
+  CHAT_MODEL_EXISTS=$(curl -sf "${OLLAMA_URL}/api/tags" | jq -r ".models[]?.name // empty" | grep -c "^${CHAT_MODEL}" || true)
+  if [ "$CHAT_MODEL_EXISTS" = "0" ]; then
+    echo "[phantom] Pulling ${CHAT_MODEL} chat model for local agent mode..."
+    curl -sf "${OLLAMA_URL}/api/pull" -d "{\"name\":\"${CHAT_MODEL}\"}" | while IFS= read -r line; do
+      status=$(echo "$line" | jq -r '.status // empty' 2>/dev/null)
+      if [ -n "$status" ] && [ "$status" != "null" ]; then
+        echo "[phantom] Chat model pull: $status"
+      fi
+    done
+    echo "[phantom] Chat model pull complete"
+  else
+    echo "[phantom] Chat model ${CHAT_MODEL} already available"
   fi
 fi
 

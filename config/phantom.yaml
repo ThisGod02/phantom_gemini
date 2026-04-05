@@ -1,8 +1,8 @@
 name: phantom
 port: 3100
 role: swe
-provider: gemini-cli
-model: gemini-2.0-flash
+provider: ollama
+model: qwen3:4b
 effort: max
 max_budget_usd: 0
 timeout_minutes: 240

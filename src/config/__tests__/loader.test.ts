@@ -53,6 +53,8 @@ name: minimal
 			expect(config.name).toBe("minimal");
 			expect(config.port).toBe(3100);
 			expect(config.role).toBe("swe");
+			expect(config.provider).toBe("ollama");
+			expect(config.model).toBe("qwen3:4b");
 			expect(config.effort).toBe("max");
 			expect(config.max_budget_usd).toBe(0);
 		} finally {
@@ -269,6 +271,52 @@ effort: high
 				process.env.PHANTOM_EFFORT = saved;
 			} else {
 				process.env.PHANTOM_EFFORT = undefined;
+			}
+			cleanup();
+		}
+	});
+
+	test("PHANTOM_PROVIDER env var overrides YAML provider with ollama", () => {
+		const path = writeYaml(
+			"env-provider.yaml",
+			`
+name: test
+provider: google
+`,
+		);
+		const saved = process.env.PHANTOM_PROVIDER;
+		try {
+			process.env.PHANTOM_PROVIDER = "ollama";
+			const config = loadConfig(path);
+			expect(config.provider).toBe("ollama");
+		} finally {
+			if (saved !== undefined) {
+				process.env.PHANTOM_PROVIDER = saved;
+			} else {
+				process.env.PHANTOM_PROVIDER = undefined;
+			}
+			cleanup();
+		}
+	});
+
+	test("PHANTOM_ENABLE_SEARCH env var overrides YAML setting", () => {
+		const path = writeYaml(
+			"env-search.yaml",
+			`
+name: test
+enable_search: false
+`,
+		);
+		const saved = process.env.PHANTOM_ENABLE_SEARCH;
+		try {
+			process.env.PHANTOM_ENABLE_SEARCH = "true";
+			const config = loadConfig(path);
+			expect(config.enable_search).toBe(true);
+		} finally {
+			if (saved !== undefined) {
+				process.env.PHANTOM_ENABLE_SEARCH = saved;
+			} else {
+				process.env.PHANTOM_ENABLE_SEARCH = undefined;
 			}
 			cleanup();
 		}

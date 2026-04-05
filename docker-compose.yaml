@@ -77,7 +77,7 @@ services:
       - phantom-net
 
   # =========================================================================
-  # Ollama: Local embedding model (nomic-embed-text)
+  # Ollama: Local chat + embedding models for fully free local mode
   # =========================================================================
   ollama:
     image: ollama/ollama:latest

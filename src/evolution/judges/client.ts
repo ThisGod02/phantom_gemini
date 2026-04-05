@@ -16,6 +16,8 @@ function getClient(): LLMProvider {
 			apiKey = process.env.ROUTERAI_API_KEY;
 		} else if (provider === "gemini-cli") {
 			apiKey = undefined; // Will be handled by OAuth detection in Provider
+		} else if (provider === "ollama") {
+			apiKey = undefined;
 		} else {
 			apiKey = process.env.GOOGLE_API_KEY;
 		}
@@ -31,6 +33,7 @@ export function setClient(client: LLMProvider | null): void {
 
 export function isJudgeAvailable(): boolean {
 	const provider = process.env.PHANTOM_PROVIDER || "google";
+	if (provider === "ollama") return false;
 	if (provider === "gemini-cli") return true; 
 	const apiKey = provider === "openai" ? process.env.ROUTERAI_API_KEY : process.env.GOOGLE_API_KEY;
 	return !!apiKey;
