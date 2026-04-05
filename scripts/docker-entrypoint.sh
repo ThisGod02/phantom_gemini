@@ -3,6 +3,22 @@ set -euo pipefail
 
 echo "[phantom] Starting bootstrap..."
 
+fix_permissions() {
+  local path="$1"
+  mkdir -p "$path"
+  chown -R phantom:phantom "$path"
+}
+
+if [ "$(id -u)" = "0" ]; then
+  echo "[phantom] Fixing permissions for mounted volumes..."
+  fix_permissions /app/config
+  fix_permissions /app/phantom-config
+  fix_permissions /app/data
+  fix_permissions /app/public
+  fix_permissions /app/repos
+  fix_permissions /home/phantom
+fi
+
 # Restore default phantom-config if volume is empty (first run)
 if [ ! -f /app/phantom-config/constitution.md ]; then
   echo "[phantom] First run - copying default phantom-config..."
@@ -99,4 +115,8 @@ export PHANTOM_DOCKER=true
 
 # 6. Start Phantom (exec replaces shell so signals reach Bun directly)
 echo "[phantom] Starting Phantom..."
+if [ "$(id -u)" = "0" ]; then
+  exec gosu phantom bun run src/index.ts
+fi
+
 exec bun run src/index.ts

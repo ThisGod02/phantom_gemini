@@ -33,6 +33,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       tini \
       curl \
+      gosu \
       git \
       jq \
       sqlite3 \
@@ -106,8 +107,8 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
 
 EXPOSE 3100
 
-# Run as non-root user
-USER phantom
+# Start as root so the entrypoint can fix mounted volume ownership,
+# then drop privileges to the phantom user before starting Bun.
 ENV HOME=/home/phantom
 
 # tini as init process for signal handling and zombie reaping
